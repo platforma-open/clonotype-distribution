@@ -1,0 +1,24 @@
+import { model } from '@platforma-open/milaboratories.in-vivo-compartment-analysis.model';
+import { defineApp } from '@platforma-sdk/ui-vue';
+import MainPage from './pages/MainPage.vue';
+import HeatmapPage from './pages/HeatmapPage.vue';
+import TemporalLinePage from './pages/TemporalLinePage.vue';
+import PrevalenceHistogramPage from './pages/PrevalenceHistogramPage.vue';
+
+export const sdkPlugin = defineApp(model, (app) => {
+  app.model.args.customBlockLabel ??= '';
+
+  return {
+    progress: () => {
+      return app.model.outputs.isRunning;
+    },
+    routes: {
+      '/': () => MainPage,
+      '/heatmap': () => HeatmapPage,
+      '/temporal': () => TemporalLinePage,
+      '/prevalence': () => PrevalenceHistogramPage,
+    },
+  };
+});
+
+export const useApp = sdkPlugin.useApp;

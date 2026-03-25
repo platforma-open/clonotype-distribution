@@ -1,0 +1,16 @@
+{
+  "name": "@platforma-open/milaboratories.in-vivo-compartment-analysis.workflow",
+  "version": "0.1.0",
+  "description": "Tengo-based template",
+  "scripts": {
+    "build": "shx rm -rf dist && pl-tengo check && pl-tengo build",
+    "do-pack": "shx rm -f *.tgz && pnpm pack && shx mv *.tgz package.tgz"
+  },
+  "dependencies": {
+    "@platforma-open/milaboratories.in-vivo-compartment-analysis.software": "workspace:*",
+    "@platforma-sdk/workflow-tengo": "catalog:"
+  },
+  "devDependencies": {
+    "@platforma-sdk/tengo-builder": "catalog:"
+  }
+}

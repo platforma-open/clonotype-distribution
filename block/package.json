@@ -1,0 +1,50 @@
+{
+  "name": "@platforma-open/milaboratories.in-vivo-compartment-analysis",
+  "version": "0.1.0",
+  "scripts": {
+    "build": "shx rm -rf ./block-pack && block-tools pack",
+    "mark-stable": "block-tools mark-stable -r 's3://milab-euce1-prod-pkgs-s3-block-registry/pub/releases/?region=eu-central-1'",
+    "prepublishOnly": "block-tools pack && block-tools publish -r 's3://milab-euce1-prod-pkgs-s3-block-registry/pub/releases/?region=eu-central-1'",
+    "do-pack": "shx rm -f *.tgz && block-tools pack && pnpm pack && shx mv *.tgz package.tgz"
+  },
+  "files": [
+    "index.d.ts",
+    "index.js"
+  ],
+  "dependencies": {
+    "@platforma-open/milaboratories.in-vivo-compartment-analysis.workflow": "workspace:*",
+    "@platforma-open/milaboratories.in-vivo-compartment-analysis.model": "workspace:*",
+    "@platforma-open/milaboratories.in-vivo-compartment-analysis.ui": "workspace:*"
+  },
+  "block": {
+    "components": {
+      "workflow": "@platforma-open/milaboratories.in-vivo-compartment-analysis.workflow/dist/tengo/tpl/main.plj.gz",
+      "model": "@platforma-open/milaboratories.in-vivo-compartment-analysis.model/dist/model.json",
+      "ui": "@platforma-open/milaboratories.in-vivo-compartment-analysis.ui/dist"
+    },
+    "meta": {
+      "title": "In Vivo Compartment Analysis",
+      "description": "Profiles clonal/cluster abundance across categorical metadata dimensions (tissue, timepoint, subject) for in vivo antibody/TCR discovery.",
+      "tags": [
+        "airr",
+        "downstream",
+        "in-vivo",
+        "compartment"
+      ],
+      "organization": {
+        "name": "MiLaboratories Inc",
+        "url": "https://milaboratories.com/"
+      },
+      "supportedPlatforms": [
+        "linux-x64",
+        "linux-aarch64",
+        "macosx-x64",
+        "macosx-aarch64"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@platforma-sdk/block-tools": "catalog:"
+  },
+  "packageManager": "pnpm@9.12.0"
+}
