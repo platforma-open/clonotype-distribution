@@ -202,14 +202,10 @@ blockTest(
       customBlockLabel: '',
       abundanceRef: abundanceOpts[0].ref,
       calculationMode: 'population',
-      compartmentVariables: [{
-        columnRef: tissueOption.value,
-        label: 'Tissue',
-      }],
-      temporalVariable: timepointOption
-        ? { columnRef: timepointOption.value, timepointOrder: ['Day 0', 'Day 7'] }
-        : { timepointOrder: [] },
-      subjectVariable: donorOption.value,
+      compartmentColumnRef: tissueOption.value,
+      temporalColumnRef: timepointOption?.value,
+      timepointOrder: timepointOption ? ['Day 0', 'Day 7'] : [],
+      subjectColumnRef: donorOption.value,
       normalization: 'relative-frequency',
       presenceThreshold: 0,
       pseudoCount: 1,

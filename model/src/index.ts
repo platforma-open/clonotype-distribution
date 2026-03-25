@@ -13,16 +13,6 @@ import {
   createPlDataTableV2,
 } from '@platforma-sdk/model';
 
-export type CompartmentVariableConfig = {
-  columnRef: SUniversalPColumnId;
-  label: string;
-};
-
-export type TemporalVariableConfig = {
-  columnRef?: SUniversalPColumnId;
-  timepointOrder: string[];
-};
-
 export type BlockArgs = {
   defaultBlockLabel: string;
   customBlockLabel: string;
@@ -34,9 +24,10 @@ export type BlockArgs = {
   calculationMode: 'population' | 'intra-subject';
 
   // Variable assignments
-  compartmentVariables: CompartmentVariableConfig[];
-  temporalVariable: TemporalVariableConfig;
-  subjectVariable?: SUniversalPColumnId;
+  compartmentColumnRef?: SUniversalPColumnId;
+  temporalColumnRef?: SUniversalPColumnId;
+  timepointOrder: string[];
+  subjectColumnRef?: SUniversalPColumnId;
 
   // Normalization
   normalization: 'relative-frequency' | 'clr';
@@ -51,7 +42,6 @@ export type UiState = {
   heatmapState: GraphMakerState;
   temporalLineState: GraphMakerState;
   prevalenceHistogramState: GraphMakerState;
-  settingsOpen: boolean;
 };
 
 export function getDefaultBlockArgs(): BlockArgs {
@@ -59,8 +49,7 @@ export function getDefaultBlockArgs(): BlockArgs {
     defaultBlockLabel: '',
     customBlockLabel: '',
     calculationMode: 'population',
-    compartmentVariables: [],
-    temporalVariable: { timepointOrder: [] },
+    timepointOrder: [],
     normalization: 'relative-frequency',
     presenceThreshold: 0,
     pseudoCount: 1,
@@ -102,24 +91,19 @@ export const model = BlockModel.create()
         },
       },
     },
-    settingsOpen: true,
   })
 
   .argsValid((ctx) => {
-    const { abundanceRef, compartmentVariables, temporalVariable, subjectVariable } = ctx.args;
+    const { abundanceRef, compartmentColumnRef, temporalColumnRef, timepointOrder, subjectColumnRef } = ctx.args;
     if (abundanceRef === undefined) return false;
-    // At least one variable must be configured
-    const hasCompartment = compartmentVariables.length > 0
-      && compartmentVariables.every((v) => v.columnRef !== undefined);
-    const hasTemporal = temporalVariable.columnRef !== undefined
-      && temporalVariable.timepointOrder.length >= 2;
+    const hasCompartment = compartmentColumnRef !== undefined;
+    const hasTemporal = temporalColumnRef !== undefined && timepointOrder.length >= 2;
     if (!hasCompartment && !hasTemporal) return false;
-    // Subject variable required for both modes
-    if (subjectVariable === undefined) return false;
+    if (subjectColumnRef === undefined) return false;
     return true;
   })
 
-  // Abundance column options (same pattern as enrichment block)
+  // Abundance column options
   .output('abundanceOptions', (ctx) =>
     ctx.resultPool.getOptions([{
       axes: [
@@ -134,18 +118,22 @@ export const model = BlockModel.create()
     }], { includeNativeLabel: true }),
   )
 
-  // Metadata column options (anchored to abundance sampleId axis)
+  // Metadata column options
   .output('metadataOptions', (ctx) => {
     const anchor = ctx.args.abundanceRef;
     if (anchor === undefined) return undefined;
     return ctx.resultPool.getCanonicalOptions({ main: anchor },
       [{
-        axes: [
-          { anchor: 'main', idx: 0 },
-        ],
+        axes: [{ anchor: 'main', idx: 0 }],
         name: 'pl7.app/metadata',
       }],
     );
+  })
+
+  // Dataset spec for detecting cluster vs clonotype
+  .output('datasetSpec', (ctx) => {
+    if (ctx.args.abundanceRef) return ctx.resultPool.getPColumnSpecByRef(ctx.args.abundanceRef);
+    return undefined;
   })
 
   // Main output table

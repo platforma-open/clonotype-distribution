@@ -1,20 +1,34 @@
 <script setup lang="ts">
+import type { PlRef } from '@platforma-sdk/model';
 import {
-  PlBlockPage,
+  PlAccordion,
+  PlAccordionSection,
   PlAgDataTableV2,
-  PlDropdownRef,
+  PlBlockPage,
   PlBtnGhost,
   PlBtnGroup,
+  PlDropdown,
+  PlDropdownRef,
+  PlElementList,
+  PlMaskIcon24,
   PlNumberField,
   PlSlideModal,
-  PlMaskIcon24,
+  PlTooltip,
   usePlDataTableSettingsV2,
 } from '@platforma-sdk/ui-vue';
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { useApp } from '../app';
 
 const app = useApp();
-const settingsOpen = ref(true);
+
+const settingsAreShown = ref(app.model.outputs.datasetSpec === undefined);
+const showSettings = () => {
+  settingsAreShown.value = true;
+};
+
+function setInput(inputRef?: PlRef) {
+  app.model.args.abundanceRef = inputRef;
+}
 
 const calculationModeOptions = [
   { label: 'Population-Level', value: 'population' },
@@ -26,20 +40,22 @@ const normalizationOptions = [
   { label: 'CLR Transform', value: 'clr' },
 ];
 
-const abundanceOptions = computed(() => app.model.outputs.abundanceOptions ?? []);
-const metadataOptions = computed(() => app.model.outputs.metadataOptions ?? []);
-
 const tableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.mainTable,
 });
+
+const isTimepointOrderOpen = ref(true);
+const isAdvancedOpen = ref(false);
 </script>
 
 <template>
-  <PlBlockPage>
-    <template #title>In Vivo Compartment Analysis</template>
-
+  <PlBlockPage
+    v-model:subtitle="app.model.args.customBlockLabel"
+    :subtitle-placeholder="app.model.args.defaultBlockLabel"
+    title="In Vivo Compartment Analysis"
+  >
     <template #append>
-      <PlBtnGhost @click.stop="() => (settingsOpen = true)">
+      <PlBtnGhost @click.stop="showSettings">
         Settings
         <template #append>
           <PlMaskIcon24 name="settings" />
@@ -50,62 +66,76 @@ const tableSettings = usePlDataTableSettingsV2({
     <PlAgDataTableV2
       v-model="app.model.ui.tableState"
       :settings="tableSettings"
+      not-ready-text="Data is not computed"
+      show-export-button
+    />
+  </PlBlockPage>
+
+  <PlSlideModal v-model="settingsAreShown">
+    <template #title>Settings</template>
+
+    <PlDropdownRef
+      v-model="app.model.args.abundanceRef"
+      :options="app.model.outputs.abundanceOptions"
+      label="Select abundance"
+      clearable
+      required
+      @update:model-value="setInput"
     />
 
-    <PlSlideModal v-model="settingsOpen" title="Settings">
-      <div style="display: flex; flex-direction: column; gap: 16px; padding: 16px;">
-        <PlDropdownRef
-          v-model="app.model.args.abundanceRef"
-          :options="abundanceOptions"
-          label="Abundance column"
-        />
+    <PlBtnGroup
+      v-model="app.model.args.calculationMode"
+      :options="calculationModeOptions"
+      label="Calculation mode"
+    />
 
-        <PlBtnGroup
-          v-model="app.model.args.calculationMode"
-          :options="calculationModeOptions"
-          label="Calculation mode"
-        />
+    <PlDropdown
+      v-model="app.model.args.subjectColumnRef"
+      :options="app.model.outputs.metadataOptions"
+      label="Subject variable"
+      required
+    />
 
-        <PlDropdownRef
-          v-model="app.model.args.subjectVariable"
-          :options="metadataOptions"
-          label="Subject variable"
-          clearable
-        />
+    <PlDropdown
+      v-model="app.model.args.compartmentColumnRef"
+      :options="app.model.outputs.metadataOptions"
+      label="Compartment variable"
+    />
 
-        <div>
-          <h4 style="margin: 0 0 8px 0;">Compartment variables</h4>
-          <div
-            v-for="(compVar, idx) in app.model.args.compartmentVariables"
-            :key="idx"
-            style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;"
-          >
-            <PlDropdownRef
-              v-model="app.model.args.compartmentVariables[idx].columnRef"
-              :options="metadataOptions"
-              :label="'Compartment ' + (idx + 1)"
-              clearable
-              style="flex: 1;"
-            />
-            <PlBtnGhost @click="app.model.args.compartmentVariables.splice(idx, 1)">
-              Remove
-            </PlBtnGhost>
-          </div>
-          <PlBtnGhost @click="app.model.args.compartmentVariables.push({ columnRef: undefined as any, label: '' })">
-            Add compartment variable
-          </PlBtnGhost>
+    <PlDropdown
+      v-model="app.model.args.temporalColumnRef"
+      :options="app.model.outputs.metadataOptions"
+      label="Temporal variable"
+    />
+
+    <PlAccordion multiple>
+      <PlAccordionSection
+        v-if="app.model.args.temporalColumnRef"
+        v-model="isTimepointOrderOpen"
+        label="Timepoint order"
+      >
+        <div style="display: flex; margin-bottom: -15px;">
+          Define timepoint order
+          <PlTooltip class="info">
+            <template #label>Define timepoint order</template>
+            <template #tooltip>
+              <div>
+                Drag to reorder timepoints chronologically.
+                The order determines how temporal metrics
+                (Temporal Shift Index, Log2 Kinetic Delta)
+                are computed. First = earliest, last = latest.
+              </div>
+            </template>
+          </PlTooltip>
         </div>
+        <PlElementList v-model:items="app.model.args.timepointOrder">
+          <template #item-title="{ item }">
+            {{ item }}
+          </template>
+        </PlElementList>
+      </PlAccordionSection>
 
-        <div>
-          <h4 style="margin: 0 0 8px 0;">Temporal variable</h4>
-          <PlDropdownRef
-            v-model="app.model.args.temporalVariable.columnRef"
-            :options="metadataOptions"
-            label="Timepoint column"
-            clearable
-          />
-        </div>
-
+      <PlAccordionSection v-model="isAdvancedOpen" label="Advanced settings">
         <PlBtnGroup
           v-model="app.model.args.normalization"
           :options="normalizationOptions"
@@ -115,19 +145,28 @@ const tableSettings = usePlDataTableSettingsV2({
         <PlNumberField
           v-model="app.model.args.presenceThreshold"
           label="Presence threshold"
-          :min="0"
-          :max="1"
+          :min-value="0"
+          :max-value="1"
           :step="0.0001"
-        />
+        >
+          <template #tooltip>
+            Minimum frequency for a clone to be considered present in a compartment.
+            Default 0 means any detection counts.
+          </template>
+        </PlNumberField>
 
         <PlNumberField
           v-model="app.model.args.pseudoCount"
-          label="Pseudo-count (for Log2 Kinetic Delta)"
-          :min="0"
-          :max="100"
+          label="Pseudo-count"
+          :min-value="0"
           :step="1"
-        />
-      </div>
-    </PlSlideModal>
-  </PlBlockPage>
+        >
+          <template #tooltip>
+            Added to frequencies before computing Log2 Kinetic Delta to prevent log(0).
+            Default: 1.
+          </template>
+        </PlNumberField>
+      </PlAccordionSection>
+    </PlAccordion>
+  </PlSlideModal>
 </template>
