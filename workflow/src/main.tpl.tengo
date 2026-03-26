@@ -6,7 +6,6 @@ pframes := import("@platforma-sdk/workflow-tengo:pframes")
 pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
 json := import("json")
 text := import("text")
-strings := import("@platforma-sdk/workflow-tengo:strings")
 
 analysisSw := assets.importSoftware("@platforma-open/milaboratories.in-vivo-compartment-analysis.software:compartment-analysis")
 
@@ -17,11 +16,9 @@ wf.prepare(func(args) {
 	if args.compartmentColumnRef != undefined {
 		bundleBuilder.addSingle(args.compartmentColumnRef)
 	}
-
 	if args.temporalColumnRef != undefined {
 		bundleBuilder.addSingle(args.temporalColumnRef)
 	}
-
 	if args.subjectColumnRef != undefined {
 		bundleBuilder.addSingle(args.subjectColumnRef)
 	}
@@ -38,68 +35,62 @@ wf.body(func(args) {
 	mode := args.calculationMode
 	normalization := args.normalization
 
-	// Build input CSV
+	hasCompartment := args.compartmentColumnRef != undefined
+	hasTimepoint := args.temporalColumnRef != undefined
+
+	// Build input CSV with hardcoded column names
 	csvBuilder := pframes.csvFileBuilder()
 	csvBuilder.add(columns.getColumn(args.abundanceRef), {header: "abundance"})
 	csvBuilder.setAxisHeader(abundanceSpec.axesSpec[0].name, "sampleId")
 	csvBuilder.setAxisHeader(abundanceSpec.axesSpec[1].name, "elementId")
 
-	compartmentColName := ""
-	compartmentLabel := ""
-	if args.compartmentColumnRef != undefined {
-		compartmentColName = "compartment"
-		compartmentLabel = "Compartment"
-		csvBuilder.add(columns.getColumn(args.compartmentColumnRef), {header: compartmentColName})
-	}
-
-	temporalColName := ""
-	if args.temporalColumnRef != undefined {
-		temporalColName = "timepoint"
-		csvBuilder.add(columns.getColumn(args.temporalColumnRef), {header: temporalColName})
-	}
-
-	subjectColName := "subjectId"
 	if args.subjectColumnRef != undefined {
-		csvBuilder.add(columns.getColumn(args.subjectColumnRef), {header: subjectColName})
+		csvBuilder.add(columns.getColumn(args.subjectColumnRef), {header: "subject"})
+	}
+	if hasCompartment {
+		csvBuilder.add(columns.getColumn(args.compartmentColumnRef), {header: "compartment"})
+	}
+	if hasTimepoint {
+		csvBuilder.add(columns.getColumn(args.temporalColumnRef), {header: "timepoint"})
 	}
 
-	csvBuilder.mem("32GiB")
+	csvBuilder.mem("8GiB")
 	csvBuilder.cpu(1)
 	inputCsv := csvBuilder.build()
-
-	// Compartment columns list for Python
-	compartmentColNames := []
-	if compartmentColName != "" {
-		compartmentColNames = append(compartmentColNames, compartmentColName)
-	}
 
 	// Run Python analysis
 	runAnalysis := exec.builder().
 		software(analysisSw).
-		mem("32GiB").
+		mem("8GiB").
 		cpu(4).
 		addFile("input.csv", inputCsv).
 		arg("input.csv").
 		arg("--calculation-mode").arg(mode).
 		arg("--normalization").arg(normalization).
-		arg("--compartment-columns").arg(string(json.encode(compartmentColNames))).
-		arg("--temporal-column").arg(temporalColName).
 		arg("--timepoint-order").arg(string(json.encode(args.timepointOrder))).
-		arg("--subject-column").arg(subjectColName).
 		arg("--presence-threshold").arg(string(args.presenceThreshold)).
 		arg("--pseudo-count").arg(string(args.pseudoCount)).
-		arg("--output-prefix").arg("result").
+		arg("--output-prefix").arg("result")
+
+	if hasCompartment {
+		runAnalysis = runAnalysis.arg("--has-compartment")
+	}
+	if hasTimepoint {
+		runAnalysis = runAnalysis.arg("--has-timepoint")
+	}
+
+	runAnalysis = runAnalysis.
 		saveFile("result_main.csv").
 		saveFile("result_prevalence.csv").
 		saveFile("result_prevalence_histogram.csv")
 
-	if compartmentColName != "" {
+	if hasCompartment {
 		runAnalysis = runAnalysis.
-			saveFile("result_spatial_" + compartmentColName + ".csv").
-			saveFile("result_heatmap_" + compartmentColName + ".csv")
+			saveFile("result_spatial.csv").
+			saveFile("result_heatmap.csv")
 	}
 
-	if temporalColName != "" && len(args.timepointOrder) >= 2 {
+	if hasTimepoint && len(args.timepointOrder) >= 2 {
 		runAnalysis = runAnalysis.
 			saveFile("result_temporal.csv").
 			saveFile("result_temporal_line.csv")
@@ -147,21 +138,20 @@ wf.body(func(args) {
 	})
 
 	// Compartment metrics
-	if compartmentColName != "" {
+	if hasCompartment {
 		varDomain := {
-			"pl7.app/vdj/compartmentAnalysis/variable": compartmentLabel,
+			"pl7.app/vdj/compartmentAnalysis/variable": "Compartment",
 			"pl7.app/vdj/compartmentAnalysis/blockId": blockId
 		}
 
 		mainImportColumns = append(mainImportColumns, {
-			column: "ri_" + compartmentColName,
-			id: "ri",
+			column: "ri", id: "ri",
 			spec: {
 				name: "pl7.app/vdj/compartmentRestrictionIndex",
 				valueType: "Double",
 				domain: varDomain,
 				annotations: {
-					"pl7.app/label": "Restriction Index / " + compartmentLabel,
+					"pl7.app/label": "Restriction Index",
 					"pl7.app/isScore": "true",
 					"pl7.app/score/rankingOrder": "descending",
 					"pl7.app/score/defaultCutoff": "0.5",
@@ -173,14 +163,13 @@ wf.body(func(args) {
 		})
 
 		mainImportColumns = append(mainImportColumns, {
-			column: "dominant_" + compartmentColName,
-			id: "dominant",
+			column: "dominant", id: "dominant",
 			spec: {
 				name: "pl7.app/vdj/dominantCompartment",
 				valueType: "String",
 				domain: varDomain,
 				annotations: {
-					"pl7.app/label": "Dominant Compartment / " + compartmentLabel,
+					"pl7.app/label": "Dominant Compartment",
 					"pl7.app/isDiscreteFilter": "true",
 					"pl7.app/isScore": "true",
 					"pl7.app/table/visibility": "default",
@@ -190,14 +179,13 @@ wf.body(func(args) {
 		})
 
 		mainImportColumns = append(mainImportColumns, {
-			column: "spatialBreadth_" + compartmentColName,
-			id: "spatialBreadth",
+			column: "spatialBreadth", id: "spatialBreadth",
 			spec: {
 				name: "pl7.app/vdj/spatialBreadth",
 				valueType: "Int",
 				domain: varDomain,
 				annotations: {
-					"pl7.app/label": "Spatial Breadth / " + compartmentLabel,
+					"pl7.app/label": "Spatial Breadth",
 					"pl7.app/isScore": "true",
 					"pl7.app/score/rankingOrder": "descending",
 					"pl7.app/table/visibility": "optional",
@@ -208,14 +196,13 @@ wf.body(func(args) {
 
 		if mode == "population" {
 			mainImportColumns = append(mainImportColumns, {
-				column: "consensusDominant_" + compartmentColName,
-				id: "consensusDominant",
+				column: "consensusDominant", id: "consensusDominant",
 				spec: {
 					name: "pl7.app/vdj/consensusDominantCompartment",
 					valueType: "String",
 					domain: varDomain,
 					annotations: {
-						"pl7.app/label": "Consensus Dominant / " + compartmentLabel,
+						"pl7.app/label": "Consensus Dominant",
 						"pl7.app/isDiscreteFilter": "true",
 						"pl7.app/isScore": "true",
 						"pl7.app/table/visibility": "default",
@@ -225,14 +212,13 @@ wf.body(func(args) {
 			})
 
 			mainImportColumns = append(mainImportColumns, {
-				column: "meanRi_" + compartmentColName,
-				id: "meanRi",
+				column: "meanRi", id: "meanRi",
 				spec: {
 					name: "pl7.app/vdj/meanRestrictionIndex",
 					valueType: "Double",
 					domain: varDomain,
 					annotations: {
-						"pl7.app/label": "Mean RI / " + compartmentLabel,
+						"pl7.app/label": "Mean RI",
 						"pl7.app/isScore": "true",
 						"pl7.app/score/rankingOrder": "descending",
 						"pl7.app/table/visibility": "optional",
@@ -243,14 +229,13 @@ wf.body(func(args) {
 			})
 
 			mainImportColumns = append(mainImportColumns, {
-				column: "stdRi_" + compartmentColName,
-				id: "stdRi",
+				column: "stdRi", id: "stdRi",
 				spec: {
 					name: "pl7.app/vdj/restrictionIndexStdDev",
 					valueType: "Double",
 					domain: varDomain,
 					annotations: {
-						"pl7.app/label": "RI StdDev / " + compartmentLabel,
+						"pl7.app/label": "RI StdDev",
 						"pl7.app/isScore": "true",
 						"pl7.app/score/rankingOrder": "ascending",
 						"pl7.app/table/visibility": "optional",
@@ -263,7 +248,7 @@ wf.body(func(args) {
 	}
 
 	// Temporal columns
-	if temporalColName != "" && len(args.timepointOrder) >= 2 {
+	if hasTimepoint && len(args.timepointOrder) >= 2 {
 		temporalDomain := {"pl7.app/vdj/compartmentAnalysis/blockId": blockId}
 
 		mainImportColumns = append(mainImportColumns, {
@@ -322,7 +307,7 @@ wf.body(func(args) {
 	}
 
 	mainCsv := runAnalysis.getFile("result_main.csv")
-	mainPfRaw := xsv.importFile(mainCsv, "csv", mainImportParams, {cpu: 1, mem: "32GiB"})
+	mainPfRaw := xsv.importFile(mainCsv, "csv", mainImportParams, {cpu: 1, mem: "8GiB"})
 
 	// Inject trace
 	mainPfBuilder := pframes.pFrameBuilder()
@@ -337,8 +322,8 @@ wf.body(func(args) {
 
 	// Heatmap PFrame
 	heatmapPf := undefined
-	if compartmentColName != "" {
-		heatmapCsv := runAnalysis.getFile("result_heatmap_" + compartmentColName + ".csv")
+	if hasCompartment {
+		heatmapCsv := runAnalysis.getFile("result_heatmap.csv")
 		heatmapPf = xsv.importFile(heatmapCsv, "csv", {
 			axes: [
 				{column: "elementId", spec: elementAxisSpec},
@@ -357,17 +342,17 @@ wf.body(func(args) {
 			}],
 			storageFormat: "Parquet",
 			partitionKeyLength: 0
-		}, {cpu: 1, mem: "32GiB"})
+		}, {cpu: 1, mem: "8GiB"})
 	}
 
 	// Temporal line PFrame
 	temporalLinePf := undefined
-	if temporalColName != "" && len(args.timepointOrder) >= 2 {
+	if hasTimepoint && len(args.timepointOrder) >= 2 {
 		temporalLineCsv := runAnalysis.getFile("result_temporal_line.csv")
 		temporalLinePf = xsv.importFile(temporalLineCsv, "csv", {
 			axes: [
 				{column: "elementId", spec: elementAxisSpec},
-				{column: "timepoint", spec: {
+				{column: "timepointValue", spec: {
 					name: "pl7.app/vdj/compartmentAnalysis/timepoint",
 					type: "String",
 					annotations: {"pl7.app/label": "Timepoint"}
@@ -382,7 +367,7 @@ wf.body(func(args) {
 			}],
 			storageFormat: "Parquet",
 			partitionKeyLength: 0
-		}, {cpu: 1, mem: "32GiB"})
+		}, {cpu: 1, mem: "8GiB"})
 	}
 
 	// Prevalence histogram PFrame
@@ -405,7 +390,7 @@ wf.body(func(args) {
 		}],
 		storageFormat: "Parquet",
 		partitionKeyLength: 0
-	}, {cpu: 1, mem: "32GiB"})
+	}, {cpu: 1, mem: "8GiB"})
 
 	// Build outputs
 	outputs := {

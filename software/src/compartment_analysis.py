@@ -2,7 +2,7 @@
 In vivo compartment analysis: computes spatial restriction, temporal kinetics,
 and cross-subject convergence metrics for clonal/cluster abundance data.
 
-Input: CSV with columns [sampleId, elementId, abundance, <metadata columns>]
+Input: CSV with columns [sampleId, elementId, abundance, subject, compartment?, timepoint?]
 Output: Multiple CSV files with computed metrics.
 """
 
@@ -22,18 +22,42 @@ def parse_args():
                         default="population")
     parser.add_argument("--normalization", choices=["relative-frequency", "clr"],
                         default="relative-frequency")
-    parser.add_argument("--compartment-columns", type=str, default="[]",
-                        help="JSON array of compartment column names")
-    parser.add_argument("--temporal-column", type=str, default="",
-                        help="Temporal metadata column name")
+    parser.add_argument("--has-compartment", action="store_true",
+                        help="Input has 'compartment' column")
+    parser.add_argument("--has-timepoint", action="store_true",
+                        help="Input has 'timepoint' column")
     parser.add_argument("--timepoint-order", type=str, default="[]",
                         help="JSON array of timepoint values in order")
-    parser.add_argument("--subject-column", type=str, required=True,
-                        help="Subject metadata column name")
     parser.add_argument("--presence-threshold", type=float, default=0.0)
     parser.add_argument("--pseudo-count", type=float, default=1.0)
     parser.add_argument("--output-prefix", type=str, default="output")
     return parser.parse_args()
+
+
+# Column names are hardcoded by convention (same as sampleId/elementId)
+COL_SUBJECT = "subject"
+COL_COMPARTMENT = "compartment"
+COL_TIMEPOINT = "timepoint"
+
+# Null-like strings that should be treated as missing/NaN in abundance
+ABUNDANCE_NULL_VALUES = ["", "NaN", "nan", "NA", "na", "null", "None"]
+
+
+def read_input(path: str, has_compartment: bool, has_timepoint: bool) -> pl.DataFrame:
+    """Read input CSV with proper type handling."""
+    df = pl.read_csv(path, null_values=ABUNDANCE_NULL_VALUES, infer_schema_length=10000)
+
+    # Ensure abundance is Float64, drop rows where abundance is null
+    df = df.with_columns(pl.col("abundance").cast(pl.Float64))
+    df = df.filter(pl.col("abundance").is_not_null())
+
+    # Force compartment and timepoint to String (they may be integers like DayAfterVac)
+    if has_compartment and COL_COMPARTMENT in df.columns:
+        df = df.with_columns(pl.col(COL_COMPARTMENT).cast(pl.String))
+    if has_timepoint and COL_TIMEPOINT in df.columns:
+        df = df.with_columns(pl.col(COL_TIMEPOINT).cast(pl.String))
+
+    return df
 
 
 def compute_relative_frequency(df: pl.DataFrame) -> pl.DataFrame:
@@ -42,7 +66,6 @@ def compute_relative_frequency(df: pl.DataFrame) -> pl.DataFrame:
         pl.col("abundance").sum().alias("sampleTotal")
     )
     df = df.join(sample_totals, on="sampleId")
-    # Filter out zero-total samples
     df = df.filter(pl.col("sampleTotal") > 0)
     df = df.with_columns(
         (pl.col("abundance") / pl.col("sampleTotal")).alias("frequency")
@@ -69,10 +92,8 @@ def compute_clr(df: pl.DataFrame) -> pl.DataFrame:
 
     def clr_transform(group: pl.DataFrame) -> pl.DataFrame:
         freq = group["frequency"].to_numpy().astype(np.float64)
-        # Replace zeros
         freq = np.where(freq == 0, delta, freq)
         freq = freq / freq.sum()
-        # CLR
         log_freq = np.log(freq)
         geo_mean = np.mean(log_freq)
         clr_vals = log_freq - geo_mean
@@ -103,38 +124,33 @@ def restriction_index(freq_by_compartment: np.ndarray) -> float:
 
 def compute_spatial_metrics(
     df: pl.DataFrame,
-    compartment_col: str,
-    subject_col: str,
     mode: str,
     presence_threshold: float,
 ) -> pl.DataFrame:
-    """Compute RI, dominant compartment, and spatial breadth for one compartment variable."""
-    categories = sorted(df[compartment_col].unique().to_list())
+    """Compute RI, dominant compartment, and spatial breadth."""
+    categories = sorted(df[COL_COMPARTMENT].unique().to_list())
     n_categories = len(categories)
 
     if n_categories == 0:
         return pl.DataFrame()
 
-    # Group by element and subject, get mean frequency per compartment
     per_subject_compartment = (
-        df.group_by(["elementId", subject_col, compartment_col])
+        df.group_by(["elementId", COL_SUBJECT, COL_COMPARTMENT])
         .agg(pl.col("frequency").mean().alias("meanFreq"))
     )
 
     results = []
 
     if mode == "population":
-        # Per-subject spatial metrics first
         per_subject_metrics = _compute_per_subject_spatial(
-            per_subject_compartment, categories, subject_col, presence_threshold
+            per_subject_compartment, categories, presence_threshold
         )
 
-        # Consensus across subjects
         for element_id, group in per_subject_metrics.group_by("elementId"):
             eid = element_id[0] if isinstance(element_id, tuple) else element_id
             ris = group["ri"].drop_nulls().to_numpy()
             dominants = group["dominant"].to_list()
-            subjects = group[subject_col].to_list()
+            subjects = group[COL_SUBJECT].to_list()
 
             subject_prevalence = len(subjects)
             mean_ri = float(np.mean(ris)) if len(ris) > 0 else float("nan")
@@ -148,7 +164,7 @@ def compute_spatial_metrics(
                     if d is not None:
                         dom_counts[d] = dom_counts.get(d, 0) + 1
                         dom_freq_sums[d] = dom_freq_sums.get(d, 0.0)
-                        row_freq = group.filter(pl.col(subject_col) == subjects[i])
+                        row_freq = group.filter(pl.col(COL_SUBJECT) == subjects[i])
                         if len(row_freq) > 0 and "dominant_freq" in row_freq.columns:
                             dom_freq_sums[d] += float(row_freq["dominant_freq"][0] or 0)
 
@@ -161,13 +177,11 @@ def compute_spatial_metrics(
             else:
                 consensus_dominant = None
 
-            # Count dominant in each category
             count_dominant = {cat: 0 for cat in categories}
             for d in dominants:
                 if d is not None and d in count_dominant:
                     count_dominant[d] += 1
 
-            # Mean spatial breadth
             breadths = group["spatialBreadth"].to_numpy()
             mean_breadth = int(round(float(np.mean(breadths)))) if len(breadths) > 0 else 0
 
@@ -186,22 +200,19 @@ def compute_spatial_metrics(
             results.append(row)
 
     else:
-        # Intra-subject mode: per-subject metrics directly
         per_subject_metrics = _compute_per_subject_spatial(
-            per_subject_compartment, categories, subject_col, presence_threshold
+            per_subject_compartment, categories, presence_threshold
         )
-        # Also compute aggregated summary
         for element_id, group in per_subject_metrics.group_by("elementId"):
             eid = element_id[0] if isinstance(element_id, tuple) else element_id
             ris = group["ri"].drop_nulls().to_numpy()
             dominants = group["dominant"].to_list()
-            subjects = group[subject_col].to_list()
+            subjects = group[COL_SUBJECT].to_list()
 
             subject_prevalence = len(subjects)
             mean_ri = float(np.mean(ris)) if len(ris) > 0 else float("nan")
             std_ri = float(np.std(ris, ddof=1)) if len(ris) > 1 else float("nan")
 
-            # Consensus dominant
             if dominants:
                 dom_counts: dict[str, int] = {}
                 for d in dominants:
@@ -243,16 +254,15 @@ def compute_spatial_metrics(
 def _compute_per_subject_spatial(
     per_subject_compartment: pl.DataFrame,
     categories: list[str],
-    subject_col: str,
     presence_threshold: float,
 ) -> pl.DataFrame:
     """Compute per-subject RI, dominant compartment, spatial breadth."""
     results = []
 
     for (element_id, subject), group in per_subject_compartment.group_by(
-        ["elementId", subject_col]
+        ["elementId", COL_SUBJECT]
     ):
-        freq_map = dict(zip(group[group.columns[2]].to_list(), group["meanFreq"].to_list()))
+        freq_map = dict(zip(group[COL_COMPARTMENT].to_list(), group["meanFreq"].to_list()))
         freq_arr = np.array([freq_map.get(cat, 0.0) for cat in categories])
 
         ri = restriction_index(freq_arr)
@@ -263,7 +273,7 @@ def _compute_per_subject_spatial(
 
         results.append({
             "elementId": element_id,
-            subject_col: subject,
+            COL_SUBJECT: subject,
             "ri": ri,
             "dominant": dominant,
             "dominant_freq": dominant_freq,
@@ -277,9 +287,7 @@ def _compute_per_subject_spatial(
 
 def compute_temporal_metrics(
     df: pl.DataFrame,
-    temporal_col: str,
     timepoint_order: list[str],
-    subject_col: str,
     mode: str,
     pseudo_count: float,
 ) -> pl.DataFrame:
@@ -290,19 +298,16 @@ def compute_temporal_metrics(
     rank_map = {tp: i for i, tp in enumerate(timepoint_order)}
     t_count = len(timepoint_order)
 
-    # Filter to known timepoints
-    df = df.filter(pl.col(temporal_col).is_in(timepoint_order))
+    df = df.filter(pl.col(COL_TIMEPOINT).is_in(timepoint_order))
 
     if mode == "population":
-        # Average frequency across subjects at each timepoint
         per_tp = (
-            df.group_by(["elementId", temporal_col])
+            df.group_by(["elementId", COL_TIMEPOINT])
             .agg(pl.col("frequency").mean().alias("meanFreq"))
         )
     else:
-        # Per subject per timepoint
         per_tp = (
-            df.group_by(["elementId", subject_col, temporal_col])
+            df.group_by(["elementId", COL_SUBJECT, COL_TIMEPOINT])
             .agg(pl.col("frequency").mean().alias("meanFreq"))
         )
 
@@ -311,15 +316,14 @@ def compute_temporal_metrics(
     if mode == "population":
         for element_id, group in per_tp.group_by("elementId"):
             eid = element_id[0] if isinstance(element_id, tuple) else element_id
-            tp_freq = dict(zip(group[temporal_col].to_list(), group["meanFreq"].to_list()))
+            tp_freq = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanFreq"].to_list()))
             row = _compute_temporal_for_element(eid, tp_freq, timepoint_order, rank_map, t_count, pseudo_count)
             results.append(row)
     else:
-        # Average per-subject temporal metrics
         per_subject_temporal = []
-        for (element_id, subject), group in per_tp.group_by(["elementId", subject_col]):
+        for (element_id, subject), group in per_tp.group_by(["elementId", COL_SUBJECT]):
             eid = element_id if not isinstance(element_id, tuple) else element_id
-            tp_freq = dict(zip(group[temporal_col].to_list(), group["meanFreq"].to_list()))
+            tp_freq = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanFreq"].to_list()))
             row = _compute_temporal_for_element(eid, tp_freq, timepoint_order, rank_map, t_count, pseudo_count)
             per_subject_temporal.append(row)
 
@@ -353,11 +357,9 @@ def _compute_temporal_for_element(
     """Compute temporal metrics for a single element."""
     freqs = np.array([tp_freq.get(tp, 0.0) for tp in timepoint_order])
 
-    # Peak timepoint
     peak_idx = int(np.argmax(freqs))
     peak_tp = timepoint_order[peak_idx]
 
-    # Temporal shift index
     total_freq = freqs.sum()
     if total_freq > 0 and t_count > 1:
         ranks = np.arange(t_count, dtype=np.float64)
@@ -365,8 +367,6 @@ def _compute_temporal_for_element(
     else:
         tsi = float("nan")
 
-    # Log2 kinetic delta
-    # Find first and last timepoints with nonzero frequency
     nonzero_indices = np.where(freqs > 0)[0]
     if len(nonzero_indices) >= 2:
         first_freq = float(freqs[nonzero_indices[0]])
@@ -385,56 +385,36 @@ def _compute_temporal_for_element(
     }
 
 
-def compute_subject_prevalence(df: pl.DataFrame, subject_col: str) -> pl.DataFrame:
+def compute_subject_prevalence(df: pl.DataFrame) -> pl.DataFrame:
     """Count distinct subjects per element."""
     return (
         df.filter(pl.col("abundance") > 0)
         .group_by("elementId")
-        .agg(pl.col(subject_col).n_unique().alias("subjectPrevalence"))
+        .agg(pl.col(COL_SUBJECT).n_unique().alias("subjectPrevalence"))
     )
 
 
-def build_heatmap_data(
-    df: pl.DataFrame,
-    compartment_col: str,
-    subject_col: str,
-    mode: str,
-) -> pl.DataFrame:
+def build_heatmap_data(df: pl.DataFrame, mode: str) -> pl.DataFrame:
     """Build heatmap data: element x compartment -> normalized frequency."""
-    if mode == "population":
-        # Average across subjects
-        heatmap = (
-            df.group_by(["elementId", compartment_col])
-            .agg(pl.col("frequency").mean().alias("normalizedFrequency"))
-        )
-    else:
-        heatmap = (
-            df.group_by(["elementId", compartment_col])
-            .agg(pl.col("frequency").mean().alias("normalizedFrequency"))
-        )
-    return heatmap.rename({compartment_col: "compartmentCategory"})
+    heatmap = (
+        df.group_by(["elementId", COL_COMPARTMENT])
+        .agg(pl.col("frequency").mean().alias("normalizedFrequency"))
+    )
+    return heatmap.rename({COL_COMPARTMENT: "compartmentCategory"})
 
 
 def build_temporal_line_data(
     df: pl.DataFrame,
-    temporal_col: str,
     timepoint_order: list[str],
     mode: str,
 ) -> pl.DataFrame:
     """Build temporal line plot data: element x timepoint -> frequency."""
-    df = df.filter(pl.col(temporal_col).is_in(timepoint_order))
-
-    if mode == "population":
-        line_data = (
-            df.group_by(["elementId", temporal_col])
-            .agg(pl.col("frequency").mean().alias("frequency"))
-        )
-    else:
-        line_data = (
-            df.group_by(["elementId", temporal_col])
-            .agg(pl.col("frequency").mean().alias("frequency"))
-        )
-    return line_data.rename({temporal_col: "timepoint"})
+    df = df.filter(pl.col(COL_TIMEPOINT).is_in(timepoint_order))
+    line_data = (
+        df.group_by(["elementId", COL_TIMEPOINT])
+        .agg(pl.col("frequency").mean().alias("frequency"))
+    )
+    return line_data.rename({COL_TIMEPOINT: "timepointValue"})
 
 
 def build_prevalence_histogram(prevalence_df: pl.DataFrame) -> pl.DataFrame:
@@ -450,24 +430,8 @@ def build_prevalence_histogram(prevalence_df: pl.DataFrame) -> pl.DataFrame:
 def main():
     args = parse_args()
 
-    # Read input
-    df = pl.read_csv(args.input_file)
-
-    # Ensure abundance is numeric (may arrive as string from XSV export, with empty strings for missing values)
-    if df["abundance"].dtype == pl.Utf8 or df["abundance"].dtype == pl.String:
-        df = df.with_columns(
-            pl.when(pl.col("abundance") == "")
-            .then(pl.lit(0.0))
-            .otherwise(pl.col("abundance").cast(pl.Float64))
-            .alias("abundance")
-        )
-    elif not df["abundance"].dtype.is_float():
-        df = df.with_columns(pl.col("abundance").cast(pl.Float64))
-
-    compartment_columns = json.loads(args.compartment_columns)
-    temporal_column = args.temporal_column if args.temporal_column else None
+    df = read_input(args.input_file, args.has_compartment, args.has_timepoint)
     timepoint_order = json.loads(args.timepoint_order)
-    subject_col = args.subject_column
     mode = args.calculation_mode
     prefix = args.output_prefix
 
@@ -478,61 +442,46 @@ def main():
         df = compute_relative_frequency(df)
 
     # Subject prevalence (always computed)
-    prevalence = compute_subject_prevalence(df, subject_col)
+    prevalence = compute_subject_prevalence(df)
     prevalence.write_csv(f"{prefix}_prevalence.csv")
 
     # Prevalence histogram
     histogram = build_prevalence_histogram(prevalence)
     histogram.write_csv(f"{prefix}_prevalence_histogram.csv")
 
-    # Spatial metrics per compartment variable
-    for comp_col in compartment_columns:
-        spatial = compute_spatial_metrics(df, comp_col, subject_col, mode, args.presence_threshold)
+    # Spatial metrics
+    if args.has_compartment:
+        spatial = compute_spatial_metrics(df, mode, args.presence_threshold)
         if len(spatial) > 0:
-            spatial.write_csv(f"{prefix}_spatial_{comp_col}.csv")
+            spatial.write_csv(f"{prefix}_spatial.csv")
 
-        # Heatmap data
-        heatmap = build_heatmap_data(df, comp_col, subject_col, mode)
+        heatmap = build_heatmap_data(df, mode)
         if len(heatmap) > 0:
-            heatmap.write_csv(f"{prefix}_heatmap_{comp_col}.csv")
+            heatmap.write_csv(f"{prefix}_heatmap.csv")
 
     # Temporal metrics
-    if temporal_column and len(timepoint_order) >= 2:
-        temporal = compute_temporal_metrics(
-            df, temporal_column, timepoint_order, subject_col, mode, args.pseudo_count
-        )
+    if args.has_timepoint and len(timepoint_order) >= 2:
+        temporal = compute_temporal_metrics(df, timepoint_order, mode, args.pseudo_count)
         if len(temporal) > 0:
             temporal.write_csv(f"{prefix}_temporal.csv")
 
-        # Temporal line data
-        line_data = build_temporal_line_data(df, temporal_column, timepoint_order, mode)
+        line_data = build_temporal_line_data(df, timepoint_order, mode)
         if len(line_data) > 0:
             line_data.write_csv(f"{prefix}_temporal_line.csv")
 
     # Write combined main table
-    # Start with prevalence
     main_table = prevalence
 
-    # Join spatial metrics
-    for comp_col in compartment_columns:
-        spatial_file = f"{prefix}_spatial_{comp_col}.csv"
+    if args.has_compartment:
         try:
-            spatial = pl.read_csv(spatial_file)
-            # Rename columns to avoid conflicts
-            rename_map = {}
-            for col in spatial.columns:
-                if col != "elementId":
-                    rename_map[col] = f"{col}_{comp_col}"
-            spatial = spatial.rename(rename_map)
+            spatial = pl.read_csv(f"{prefix}_spatial.csv")
             main_table = main_table.join(spatial, on="elementId", how="left")
         except Exception:
             pass
 
-    # Join temporal metrics
-    if temporal_column and len(timepoint_order) >= 2:
-        temporal_file = f"{prefix}_temporal.csv"
+    if args.has_timepoint and len(timepoint_order) >= 2:
         try:
-            temporal = pl.read_csv(temporal_file)
+            temporal = pl.read_csv(f"{prefix}_temporal.csv")
             main_table = main_table.join(temporal, on="elementId", how="left")
         except Exception:
             pass
@@ -540,9 +489,10 @@ def main():
     main_table.write_csv(f"{prefix}_main.csv")
 
     print(f"Analysis complete. Mode: {mode}, Normalization: {args.normalization}")
-    print(f"Compartment variables: {compartment_columns}")
-    if temporal_column:
-        print(f"Temporal variable: {temporal_column}, Order: {timepoint_order}")
+    if args.has_compartment:
+        print("Compartment variable: included")
+    if args.has_timepoint:
+        print(f"Timepoint order: {timepoint_order}")
     print(f"Results written with prefix: {prefix}")
 
 
