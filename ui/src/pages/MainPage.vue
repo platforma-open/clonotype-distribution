@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { PlRef } from '@platforma-sdk/model';
+import type { PObjectId, PlRef } from '@platforma-sdk/model';
+import { getSingleColumnData } from '@platforma-sdk/model';
 import {
   PlAccordion,
   PlAccordionSection,
@@ -16,7 +17,7 @@ import {
   PlTooltip,
   usePlDataTableSettingsV2,
 } from '@platforma-sdk/ui-vue';
-import { computed, ref, watchEffect } from 'vue';
+import { computed, ref, watch, watchEffect } from 'vue';
 import { useApp } from '../app';
 
 const app = useApp();
@@ -44,8 +45,33 @@ const tableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.mainTable,
 });
 
-// Unique timepoint values from the model (extracted from p-column spec)
-const timepointValues = computed(() => app.model.outputs.temporalColumnValues ?? []);
+// Fetch unique timepoint values from the temporal column via pframe driver
+const timepointValues = ref<string[]>([]);
+
+watch(
+  () => ({
+    pframe: app.model.outputs.temporalColumnPframe,
+    colId: app.model.outputs.temporalColumnId,
+  }),
+  async ({ pframe, colId }) => {
+    if (!pframe || !colId) {
+      timepointValues.value = [];
+      return;
+    }
+    try {
+      const colData = await getSingleColumnData(pframe, colId as PObjectId);
+      const unique = [...new Set(
+        colData.data
+          .filter((v): v is string | number => v != null)
+          .map(String),
+      )].sort();
+      timepointValues.value = unique;
+    } catch {
+      timepointValues.value = [];
+    }
+  },
+  { immediate: true },
+);
 
 const availableTimepointsToAdd = computed(() => {
   const current = new Set(app.model.args.timepointOrder);

@@ -452,6 +452,18 @@ def main():
 
     # Read input
     df = pl.read_csv(args.input_file)
+
+    # Ensure abundance is numeric (may arrive as string from XSV export, with empty strings for missing values)
+    if df["abundance"].dtype == pl.Utf8 or df["abundance"].dtype == pl.String:
+        df = df.with_columns(
+            pl.when(pl.col("abundance") == "")
+            .then(pl.lit(0.0))
+            .otherwise(pl.col("abundance").cast(pl.Float64))
+            .alias("abundance")
+        )
+    elif not df["abundance"].dtype.is_float():
+        df = df.with_columns(pl.col("abundance").cast(pl.Float64))
+
     compartment_columns = json.loads(args.compartment_columns)
     temporal_column = args.temporal_column if args.temporal_column else None
     timepoint_order = json.loads(args.timepoint_order)

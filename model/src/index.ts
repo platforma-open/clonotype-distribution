@@ -136,30 +136,29 @@ export const model = BlockModel.create()
     return undefined;
   })
 
-  // Unique values of the temporal column (extracted from anchored p-column data)
-  .output('temporalColumnValues', (ctx) => {
+  // PFrame containing temporal column data (for fetching unique values in UI)
+  .output('temporalColumnPframe', (ctx) => {
     const { temporalColumnRef, abundanceRef } = ctx.args;
     if (!temporalColumnRef || !abundanceRef) return undefined;
 
     const cols = ctx.resultPool.getAnchoredPColumns(
       { main: abundanceRef },
-      [JSON.parse(temporalColumnRef) as never],
+      JSON.parse(temporalColumnRef) as never,
     );
     if (!cols || cols.length === 0) return undefined;
+    return ctx.createPFrame(cols);
+  })
 
-    // Try to get discrete values from the column spec annotations
-    const col = cols[0];
-    const discreteVals = col.spec.annotations?.['pl7.app/discreteValues'];
-    if (discreteVals) {
-      try {
-        return JSON.parse(discreteVals) as string[];
-      } catch {
-        return undefined;
-      }
-    }
+  // Column ID for the temporal column (needed by getSingleColumnData in UI)
+  .output('temporalColumnId', (ctx) => {
+    const { temporalColumnRef, abundanceRef } = ctx.args;
+    if (!temporalColumnRef || !abundanceRef) return undefined;
 
-    // No discrete values available in spec
-    return undefined;
+    const cols = ctx.resultPool.getAnchoredPColumns(
+      { main: abundanceRef },
+      JSON.parse(temporalColumnRef) as never,
+    );
+    return cols?.[0]?.id;
   })
 
   // Main output table
