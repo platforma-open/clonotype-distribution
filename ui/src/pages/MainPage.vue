@@ -45,6 +45,9 @@ const tableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.mainTable,
 });
 
+// Subject is required only in intra-subject mode
+const subjectRequired = computed(() => app.model.args.calculationMode === 'intra-subject');
+
 // Fetch unique timepoint values from the temporal column via pframe driver
 const timepointValues = ref<string[]>([]);
 
@@ -153,19 +156,27 @@ const isAdvancedOpen = ref(false);
       v-model="app.model.args.subjectColumnRef"
       :options="app.model.outputs.metadataOptions"
       label="Subject variable"
-      required
-    />
+      :required="subjectRequired"
+      clearable
+    >
+      <template #tooltip>
+        Required for Intra-Subject mode. Optional in Population-Level mode —
+        when omitted, all samples are pooled and cross-subject metrics are skipped.
+      </template>
+    </PlDropdown>
 
     <PlDropdown
-      v-model="app.model.args.compartmentColumnRef"
+      v-model="app.model.args.groupingColumnRef"
       :options="app.model.outputs.metadataOptions"
-      label="Compartment variable"
+      label="Grouping variable"
+      clearable
     />
 
     <PlDropdown
       v-model="app.model.args.temporalColumnRef"
       :options="app.model.outputs.metadataOptions"
       label="Temporal variable"
+      clearable
     />
 
     <PlAccordion multiple>
@@ -182,7 +193,7 @@ const isAdvancedOpen = ref(false);
               <div>
                 Drag to reorder timepoints chronologically.
                 The order determines how temporal metrics
-                (Temporal Shift Index, Log2 Kinetic Delta)
+                (TSI, Log2 Peak Delta, Log2 Kinetic Delta)
                 are computed. First = earliest, last = latest.
               </div>
             </template>
@@ -212,6 +223,42 @@ const isAdvancedOpen = ref(false);
         />
 
         <PlNumberField
+          v-model="app.model.args.minAbundanceThreshold"
+          label="Min abundance threshold"
+          :min-value="0"
+          :step="1"
+        >
+          <template #tooltip>
+            Filter clones with abundance below this value in ALL samples before computation.
+            Default 0 includes everything.
+          </template>
+        </PlNumberField>
+
+        <PlNumberField
+          v-model="app.model.args.minSubjectCount"
+          label="Min subject count"
+          :min-value="1"
+          :step="1"
+        >
+          <template #tooltip>
+            Averaged cross-subject metrics (Mean RI, Mean Log2PD, etc.) are set to NaN
+            when a clone is present in fewer subjects than this threshold. Default: 2.
+          </template>
+        </PlNumberField>
+
+        <PlNumberField
+          v-model="app.model.args.topN"
+          label="Top N clones (temporal plot)"
+          :min-value="1"
+          :step="1"
+        >
+          <template #tooltip>
+            Number of top clones to show in the temporal trajectory plot,
+            ranked by absolute Log2 Peak Delta. Default: 20.
+          </template>
+        </PlNumberField>
+
+        <PlNumberField
           v-model="app.model.args.presenceThreshold"
           label="Presence threshold"
           :min-value="0"
@@ -219,7 +266,7 @@ const isAdvancedOpen = ref(false);
           :step="0.0001"
         >
           <template #tooltip>
-            Minimum frequency for a clone to be considered present in a compartment.
+            Minimum frequency for a clone to be considered present in a group.
             Default 0 means any detection counts.
           </template>
         </PlNumberField>
@@ -231,7 +278,7 @@ const isAdvancedOpen = ref(false);
           :step="1"
         >
           <template #tooltip>
-            Added to frequencies before computing Log2 Kinetic Delta to prevent log(0).
+            Added to frequencies before log2 fold-change computation to prevent log(0).
             Default: 1.
           </template>
         </PlNumberField>

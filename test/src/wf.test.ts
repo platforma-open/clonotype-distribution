@@ -202,13 +202,16 @@ blockTest(
       customBlockLabel: '',
       abundanceRef: abundanceOpts[0].ref,
       calculationMode: 'population',
-      compartmentColumnRef: tissueOption.value,
+      groupingColumnRef: tissueOption.value,
       temporalColumnRef: timepointOption?.value,
       timepointOrder: timepointOption ? ['Day 0', 'Day 7'] : [],
       subjectColumnRef: donorOption.value,
       normalization: 'relative-frequency',
       presenceThreshold: 0,
       pseudoCount: 1,
+      minAbundanceThreshold: 0,
+      minSubjectCount: 2,
+      topN: 20,
     };
 
     await project.setBlockArgs(compartmentBlockId, blockArgs);

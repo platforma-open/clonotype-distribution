@@ -13,8 +13,8 @@ wf.prepare(func(args) {
 	bundleBuilder := wf.createPBundleBuilder()
 	bundleBuilder.addAnchor("main", args.abundanceRef)
 
-	if args.compartmentColumnRef != undefined {
-		bundleBuilder.addSingle(args.compartmentColumnRef)
+	if args.groupingColumnRef != undefined {
+		bundleBuilder.addSingle(args.groupingColumnRef)
 	}
 	if args.temporalColumnRef != undefined {
 		bundleBuilder.addSingle(args.temporalColumnRef)
@@ -35,8 +35,9 @@ wf.body(func(args) {
 	mode := args.calculationMode
 	normalization := args.normalization
 
-	hasCompartment := args.compartmentColumnRef != undefined
+	hasGrouping := args.groupingColumnRef != undefined
 	hasTimepoint := args.temporalColumnRef != undefined
+	hasSubject := args.subjectColumnRef != undefined
 
 	// Build input CSV with hardcoded column names
 	csvBuilder := pframes.csvFileBuilder()
@@ -44,11 +45,11 @@ wf.body(func(args) {
 	csvBuilder.setAxisHeader(abundanceSpec.axesSpec[0].name, "sampleId")
 	csvBuilder.setAxisHeader(abundanceSpec.axesSpec[1].name, "elementId")
 
-	if args.subjectColumnRef != undefined {
+	if hasSubject {
 		csvBuilder.add(columns.getColumn(args.subjectColumnRef), {header: "subject"})
 	}
-	if hasCompartment {
-		csvBuilder.add(columns.getColumn(args.compartmentColumnRef), {header: "compartment"})
+	if hasGrouping {
+		csvBuilder.add(columns.getColumn(args.groupingColumnRef), {header: "grouping"})
 	}
 	if hasTimepoint {
 		csvBuilder.add(columns.getColumn(args.temporalColumnRef), {header: "timepoint"})
@@ -70,13 +71,19 @@ wf.body(func(args) {
 		arg("--timepoint-order").arg(string(json.encode(args.timepointOrder))).
 		arg("--presence-threshold").arg(string(args.presenceThreshold)).
 		arg("--pseudo-count").arg(string(args.pseudoCount)).
+		arg("--min-abundance-threshold").arg(string(args.minAbundanceThreshold)).
+		arg("--min-subject-count").arg(string(args.minSubjectCount)).
+		arg("--top-n").arg(string(args.topN)).
 		arg("--output-prefix").arg("result")
 
-	if hasCompartment {
-		runAnalysis = runAnalysis.arg("--has-compartment")
+	if hasGrouping {
+		runAnalysis = runAnalysis.arg("--has-grouping")
 	}
 	if hasTimepoint {
 		runAnalysis = runAnalysis.arg("--has-timepoint")
+	}
+	if hasSubject {
+		runAnalysis = runAnalysis.arg("--has-subject")
 	}
 
 	runAnalysis = runAnalysis.
@@ -84,9 +91,9 @@ wf.body(func(args) {
 		saveFile("result_prevalence.csv").
 		saveFile("result_prevalence_histogram.csv")
 
-	if hasCompartment {
+	if hasGrouping {
 		runAnalysis = runAnalysis.
-			saveFile("result_spatial.csv").
+			saveFile("result_grouping.csv").
 			saveFile("result_heatmap.csv")
 	}
 
@@ -101,11 +108,9 @@ wf.body(func(args) {
 		saveStdoutContent().
 		run()
 
-	// Element axis spec
 	elementAxisSpec := abundanceSpec.axesSpec[1]
 
-	// Build trace
-	traceLabel := "Compartment Analysis - " + mode
+	traceLabel := "Spatiotemporal Analysis - " + mode
 	if normalization == "clr" {
 		traceLabel = traceLabel + " (CLR)"
 	}
@@ -115,17 +120,15 @@ wf.body(func(args) {
 		label: traceLabel
 	})
 
-	// Build import columns for main results
+	// Main import columns
 	mainImportColumns := []
 
 	// Subject prevalence
 	mainImportColumns = append(mainImportColumns, {
-		column: "subjectPrevalence",
-		id: "subjectPrevalence",
+		column: "subjectPrevalence", id: "subjectPrevalence",
 		spec: {
-			name: "pl7.app/vdj/subjectPrevalence",
-			valueType: "Int",
-			domain: {"pl7.app/vdj/compartmentAnalysis/blockId": blockId},
+			name: "pl7.app/vdj/subjectPrevalence", valueType: "Int",
+			domain: {"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId},
 			annotations: {
 				"pl7.app/label": "Subject Prevalence",
 				"pl7.app/isScore": "true",
@@ -137,18 +140,34 @@ wf.body(func(args) {
 		}
 	})
 
-	// Compartment metrics
-	if hasCompartment {
+	// Subject prevalence fraction
+	mainImportColumns = append(mainImportColumns, {
+		column: "subjectPrevalenceFraction", id: "subjectPrevalenceFraction",
+		spec: {
+			name: "pl7.app/vdj/subjectPrevalenceFraction", valueType: "Double",
+			domain: {"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId},
+			annotations: {
+				"pl7.app/label": "Subject Prevalence Fraction",
+				"pl7.app/isScore": "true",
+				"pl7.app/score/rankingOrder": "descending",
+				"pl7.app/table/visibility": "optional",
+				"pl7.app/table/orderPriority": "109",
+				"pl7.app/format": ".3f"
+			}
+		}
+	})
+
+	// Grouping metrics
+	if hasGrouping {
 		varDomain := {
-			"pl7.app/vdj/compartmentAnalysis/variable": "Compartment",
-			"pl7.app/vdj/compartmentAnalysis/blockId": blockId
+			"pl7.app/vdj/spatiotemporalAnalysis/variable": "Grouping",
+			"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId
 		}
 
 		mainImportColumns = append(mainImportColumns, {
 			column: "ri", id: "ri",
 			spec: {
-				name: "pl7.app/vdj/compartmentRestrictionIndex",
-				valueType: "Double",
+				name: "pl7.app/vdj/restrictionIndex", valueType: "Double",
 				domain: varDomain,
 				annotations: {
 					"pl7.app/label": "Restriction Index",
@@ -165,11 +184,10 @@ wf.body(func(args) {
 		mainImportColumns = append(mainImportColumns, {
 			column: "dominant", id: "dominant",
 			spec: {
-				name: "pl7.app/vdj/dominantCompartment",
-				valueType: "String",
+				name: "pl7.app/vdj/dominantGroup", valueType: "String",
 				domain: varDomain,
 				annotations: {
-					"pl7.app/label": "Dominant Compartment",
+					"pl7.app/label": "Dominant Group",
 					"pl7.app/isDiscreteFilter": "true",
 					"pl7.app/isScore": "true",
 					"pl7.app/table/visibility": "default",
@@ -179,13 +197,12 @@ wf.body(func(args) {
 		})
 
 		mainImportColumns = append(mainImportColumns, {
-			column: "spatialBreadth", id: "spatialBreadth",
+			column: "breadth", id: "breadth",
 			spec: {
-				name: "pl7.app/vdj/spatialBreadth",
-				valueType: "Int",
+				name: "pl7.app/vdj/breadth", valueType: "Int",
 				domain: varDomain,
 				annotations: {
-					"pl7.app/label": "Spatial Breadth",
+					"pl7.app/label": "Breadth",
 					"pl7.app/isScore": "true",
 					"pl7.app/score/rankingOrder": "descending",
 					"pl7.app/table/visibility": "optional",
@@ -194,12 +211,11 @@ wf.body(func(args) {
 			}
 		})
 
-		if mode == "population" {
+		if mode == "population" && hasSubject {
 			mainImportColumns = append(mainImportColumns, {
 				column: "consensusDominant", id: "consensusDominant",
 				spec: {
-					name: "pl7.app/vdj/consensusDominantCompartment",
-					valueType: "String",
+					name: "pl7.app/vdj/consensusDominantGroup", valueType: "String",
 					domain: varDomain,
 					annotations: {
 						"pl7.app/label": "Consensus Dominant",
@@ -214,8 +230,7 @@ wf.body(func(args) {
 			mainImportColumns = append(mainImportColumns, {
 				column: "meanRi", id: "meanRi",
 				spec: {
-					name: "pl7.app/vdj/meanRestrictionIndex",
-					valueType: "Double",
+					name: "pl7.app/vdj/meanRestrictionIndex", valueType: "Double",
 					domain: varDomain,
 					annotations: {
 						"pl7.app/label": "Mean RI",
@@ -231,8 +246,7 @@ wf.body(func(args) {
 			mainImportColumns = append(mainImportColumns, {
 				column: "stdRi", id: "stdRi",
 				spec: {
-					name: "pl7.app/vdj/restrictionIndexStdDev",
-					valueType: "Double",
+					name: "pl7.app/vdj/restrictionIndexStdDev", valueType: "Double",
 					domain: varDomain,
 					annotations: {
 						"pl7.app/label": "RI StdDev",
@@ -249,7 +263,7 @@ wf.body(func(args) {
 
 	// Temporal columns
 	if hasTimepoint && len(args.timepointOrder) >= 2 {
-		temporalDomain := {"pl7.app/vdj/compartmentAnalysis/blockId": blockId}
+		temporalDomain := {"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId}
 
 		mainImportColumns = append(mainImportColumns, {
 			column: "peakTimepoint", id: "peakTimepoint",
@@ -262,6 +276,22 @@ wf.body(func(args) {
 					"pl7.app/isScore": "true",
 					"pl7.app/table/visibility": "default",
 					"pl7.app/table/orderPriority": "85"
+				}
+			}
+		})
+
+		mainImportColumns = append(mainImportColumns, {
+			column: "log2PeakDelta", id: "log2PeakDelta",
+			spec: {
+				name: "pl7.app/vdj/log2PeakDelta", valueType: "Double",
+				domain: temporalDomain,
+				annotations: {
+					"pl7.app/label": "Log2 Peak Delta",
+					"pl7.app/isScore": "true",
+					"pl7.app/score/rankingOrder": "descending",
+					"pl7.app/table/visibility": "default",
+					"pl7.app/table/orderPriority": "77",
+					"pl7.app/format": ".2f"
 				}
 			}
 		})
@@ -291,7 +321,7 @@ wf.body(func(args) {
 					"pl7.app/label": "Log2 Kinetic Delta",
 					"pl7.app/isScore": "true",
 					"pl7.app/score/rankingOrder": "descending",
-					"pl7.app/table/visibility": "default",
+					"pl7.app/table/visibility": "optional",
 					"pl7.app/table/orderPriority": "75",
 					"pl7.app/format": ".2f"
 				}
@@ -322,15 +352,15 @@ wf.body(func(args) {
 
 	// Heatmap PFrame
 	heatmapPf := undefined
-	if hasCompartment {
+	if hasGrouping {
 		heatmapCsv := runAnalysis.getFile("result_heatmap.csv")
 		heatmapPf = xsv.importFile(heatmapCsv, "csv", {
 			axes: [
 				{column: "elementId", spec: elementAxisSpec},
-				{column: "compartmentCategory", spec: {
-					name: "pl7.app/vdj/compartmentAnalysis/compartmentCategory",
+				{column: "groupCategory", spec: {
+					name: "pl7.app/vdj/spatiotemporalAnalysis/groupCategory",
 					type: "String",
-					annotations: {"pl7.app/label": "Compartment"}
+					annotations: {"pl7.app/label": "Group"}
 				}}
 			],
 			columns: [{
@@ -353,7 +383,7 @@ wf.body(func(args) {
 			axes: [
 				{column: "elementId", spec: elementAxisSpec},
 				{column: "timepointValue", spec: {
-					name: "pl7.app/vdj/compartmentAnalysis/timepoint",
+					name: "pl7.app/vdj/spatiotemporalAnalysis/timepoint",
 					type: "String",
 					annotations: {"pl7.app/label": "Timepoint"}
 				}}
@@ -376,7 +406,7 @@ wf.body(func(args) {
 		axes: [{
 			column: "prevalenceCount",
 			spec: {
-				name: "pl7.app/vdj/compartmentAnalysis/prevalenceCount",
+				name: "pl7.app/vdj/spatiotemporalAnalysis/prevalenceCount",
 				type: "Int",
 				annotations: {"pl7.app/label": "Number of Subjects"}
 			}
@@ -392,7 +422,6 @@ wf.body(func(args) {
 		partitionKeyLength: 0
 	}, {cpu: 1, mem: "8GiB"})
 
-	// Build outputs
 	outputs := {
 		mainPf: pframes.exportFrame(mainPf),
 		prevalenceHistogramPf: pframes.exportFrame(prevalenceHistogramPf)

@@ -14,7 +14,7 @@ const defaultOptions = computed((): PredefinedGraphOption<'heatmap'>[] | null =>
   const freqCol = pCols.find((p) => p.spec.name === 'pl7.app/vdj/normalizedFrequency');
   if (!freqCol) return null;
 
-  // axes: [elementId, compartmentCategory], value: normalizedFrequency
+  // axes: [elementId, groupCategory], value: normalizedFrequency
   return [
     { inputName: 'x', selectedSource: freqCol.spec.axesSpec[1] },
     { inputName: 'y', selectedSource: freqCol.spec.axesSpec[0] },

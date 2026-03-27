@@ -24,17 +24,20 @@ export type BlockArgs = {
   calculationMode: 'population' | 'intra-subject';
 
   // Variable assignments
-  compartmentColumnRef?: SUniversalPColumnId;
+  groupingColumnRef?: SUniversalPColumnId;
   temporalColumnRef?: SUniversalPColumnId;
   timepointOrder: string[];
-  subjectColumnRef?: SUniversalPColumnId;
+  subjectColumnRef?: SUniversalPColumnId; // optional in population mode
 
   // Normalization
   normalization: 'relative-frequency' | 'clr';
 
-  // Thresholds
+  // Thresholds & filters
   presenceThreshold: number;
   pseudoCount: number;
+  minAbundanceThreshold: number;
+  minSubjectCount: number;
+  topN: number;
 };
 
 export type UiState = {
@@ -53,6 +56,9 @@ export function getDefaultBlockArgs(): BlockArgs {
     normalization: 'relative-frequency',
     presenceThreshold: 0,
     pseudoCount: 1,
+    minAbundanceThreshold: 0,
+    minSubjectCount: 2,
+    topN: 20,
   };
 }
 
@@ -63,7 +69,7 @@ export const model = BlockModel.create()
   .withUiState<UiState>({
     tableState: createPlDataTableStateV2(),
     heatmapState: {
-      title: 'Compartment heatmap',
+      title: 'Grouping heatmap',
       template: 'heatmap',
       currentTab: null,
     },
@@ -94,12 +100,13 @@ export const model = BlockModel.create()
   })
 
   .argsValid((ctx) => {
-    const { abundanceRef, compartmentColumnRef, temporalColumnRef, timepointOrder, subjectColumnRef } = ctx.args;
+    const { abundanceRef, groupingColumnRef, temporalColumnRef, timepointOrder, subjectColumnRef, calculationMode } = ctx.args;
     if (abundanceRef === undefined) return false;
-    const hasCompartment = compartmentColumnRef !== undefined;
+    const hasGrouping = groupingColumnRef !== undefined;
     const hasTemporal = temporalColumnRef !== undefined && timepointOrder.length >= 2;
-    if (!hasCompartment && !hasTemporal) return false;
-    if (subjectColumnRef === undefined) return false;
+    if (!hasGrouping && !hasTemporal) return false;
+    // Subject required only in intra-subject mode
+    if (calculationMode === 'intra-subject' && subjectColumnRef === undefined) return false;
     return true;
   })
 
@@ -206,7 +213,7 @@ export const model = BlockModel.create()
 
   .sections((_ctx) => [
     { type: 'link', href: '/', label: 'Main' },
-    { type: 'link', href: '/heatmap', label: 'Compartment Heatmap' },
+    { type: 'link', href: '/heatmap', label: 'Grouping Heatmap' },
     { type: 'link', href: '/temporal', label: 'Temporal Trajectory' },
     { type: 'link', href: '/prevalence', label: 'Subject Prevalence' },
   ])
