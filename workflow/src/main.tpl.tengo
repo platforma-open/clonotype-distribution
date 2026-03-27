@@ -7,7 +7,7 @@ pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
 json := import("json")
 text := import("text")
 
-analysisSw := assets.importSoftware("@platforma-open/milaboratories.in-vivo-compartment-analysis.software:compartment-analysis")
+analysisSw := assets.importSoftware("@platforma-open/milaboratories.spatiotemporal-analysis.software:compartment-analysis")
 
 wf.prepare(func(args) {
 	bundleBuilder := wf.createPBundleBuilder()
@@ -110,7 +110,7 @@ wf.body(func(args) {
 		traceLabel = traceLabel + " (CLR)"
 	}
 	trace := pSpec.makeTrace(abundanceSpec, {
-		type: "milaboratories.in-vivo-compartment-analysis",
+		type: "milaboratories.spatiotemporal-analysis",
 		importance: 30,
 		label: traceLabel
 	})

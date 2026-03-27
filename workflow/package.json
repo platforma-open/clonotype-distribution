@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milaboratories.in-vivo-compartment-analysis.workflow",
+  "name": "@platforma-open/milaboratories.spatiotemporal-analysis.workflow",
   "version": "0.1.0",
   "description": "Tengo-based template",
   "scripts": {
@@ -7,7 +7,7 @@
     "do-pack": "shx rm -f *.tgz && pnpm pack && shx mv *.tgz package.tgz"
   },
   "dependencies": {
-    "@platforma-open/milaboratories.in-vivo-compartment-analysis.software": "workspace:*",
+    "@platforma-open/milaboratories.spatiotemporal-analysis.software": "workspace:*",
     "@platforma-sdk/workflow-tengo": "catalog:"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milaboratories.in-vivo-compartment-analysis",
+  "name": "@platforma-open/milaboratories.spatiotemporal-analysis",
   "version": "0.1.0",
   "scripts": {
     "build": "shx rm -rf ./block-pack && block-tools pack",
@@ -12,25 +12,24 @@
     "index.js"
   ],
   "dependencies": {
-    "@platforma-open/milaboratories.in-vivo-compartment-analysis.workflow": "workspace:*",
-    "@platforma-open/milaboratories.in-vivo-compartment-analysis.model": "workspace:*",
-    "@platforma-open/milaboratories.in-vivo-compartment-analysis.ui": "workspace:*"
+    "@platforma-open/milaboratories.spatiotemporal-analysis.workflow": "workspace:*",
+    "@platforma-open/milaboratories.spatiotemporal-analysis.model": "workspace:*",
+    "@platforma-open/milaboratories.spatiotemporal-analysis.ui": "workspace:*"
   },
   "block": {
     "components": {
-      "workflow": "@platforma-open/milaboratories.in-vivo-compartment-analysis.workflow/dist/tengo/tpl/main.plj.gz",
-      "model": "@platforma-open/milaboratories.in-vivo-compartment-analysis.model/dist/model.json",
-      "ui": "@platforma-open/milaboratories.in-vivo-compartment-analysis.ui/dist"
+      "workflow": "@platforma-open/milaboratories.spatiotemporal-analysis.workflow/dist/tengo/tpl/main.plj.gz",
+      "model": "@platforma-open/milaboratories.spatiotemporal-analysis.model/dist/model.json",
+      "ui": "@platforma-open/milaboratories.spatiotemporal-analysis.ui/dist"
     },
     "meta": {
-      "title": "In Vivo Compartment Analysis",
-      "description": "Profiles clonal/cluster abundance across categorical metadata dimensions (tissue, timepoint, subject) for in vivo antibody/TCR discovery.",
+      "title": "Spatiotemporal Analysis",
+      "description": "Quantifies how clonotypes or clusters distribute across tissues, timepoints, and subjects. Computes restriction index, dominant compartment, spatial breadth, subject prevalence, temporal shift, and kinetic delta — key metrics for antibody/TCR discovery campaigns.",
       "tags": [
         "airr",
-        "downstream",
-        "in-vivo",
-        "compartment"
+        "downstream"
       ],
+      "url": "https://github.com/platforma-open/spatiotemporal-analysis",
       "organization": {
         "name": "MiLaboratories Inc",
         "url": "https://milaboratories.com/"

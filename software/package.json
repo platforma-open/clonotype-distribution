@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milaboratories.in-vivo-compartment-analysis.software",
+  "name": "@platforma-open/milaboratories.spatiotemporal-analysis.software",
   "version": "0.1.0",
   "scripts": {
     "build": "pl-pkg build",

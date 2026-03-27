@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milaboratories.in-vivo-compartment-analysis.model",
+  "name": "@platforma-open/milaboratories.spatiotemporal-analysis.model",
   "version": "0.1.0",
   "description": "Block model",
   "type": "module",

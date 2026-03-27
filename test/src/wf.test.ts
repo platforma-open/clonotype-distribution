@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any */
 import {
   getDefaultBlockArgs,
-} from '@platforma-open/milaboratories.in-vivo-compartment-analysis.model';
+} from '@platforma-open/milaboratories.spatiotemporal-analysis.model';
 import type {
   BlockArgs,
-} from '@platforma-open/milaboratories.in-vivo-compartment-analysis.model';
+} from '@platforma-open/milaboratories.spatiotemporal-analysis.model';
 import { blockSpec as clonotypingBlockSpec } from '@platforma-open/milaboratories.mixcr-clonotyping-2';
 import type {
   BlockArgs as MiXCRClonotypingBlockArgs,

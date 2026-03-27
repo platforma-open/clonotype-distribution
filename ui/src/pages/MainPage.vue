@@ -112,7 +112,7 @@ const isAdvancedOpen = ref(false);
   <PlBlockPage
     v-model:subtitle="app.model.args.customBlockLabel"
     :subtitle-placeholder="app.model.args.defaultBlockLabel"
-    title="In Vivo Compartment Analysis"
+    title="Spatiotemporal Analysis"
   >
     <template #append>
       <PlBtnGhost @click.stop="showSettings">

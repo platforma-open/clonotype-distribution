@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milaboratories.in-vivo-compartment-analysis.ui",
+  "name": "@platforma-open/milaboratories.spatiotemporal-analysis.ui",
   "version": "0.1.0",
   "type": "module",
   "scripts": {
@@ -12,7 +12,7 @@
     "do-pack": "shx rm -f *.tgz && pnpm pack && shx mv *.tgz package.tgz"
   },
   "dependencies": {
-    "@platforma-open/milaboratories.in-vivo-compartment-analysis.model": "workspace:*",
+    "@platforma-open/milaboratories.spatiotemporal-analysis.model": "workspace:*",
     "@platforma-sdk/ui-vue": "catalog:",
     "@platforma-sdk/model": "catalog:",
     "@milaboratories/graph-maker": "catalog:",

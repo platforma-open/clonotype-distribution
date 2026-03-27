@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milaboratories.in-vivo-compartment-analysis.test",
+  "name": "@platforma-open/milaboratories.spatiotemporal-analysis.test",
   "private": true,
   "version": "0.1.0",
   "description": "Block tests",
@@ -12,8 +12,8 @@
   "files": [],
   "keywords": [],
   "dependencies": {
-    "this-block": "workspace:@platforma-open/milaboratories.in-vivo-compartment-analysis@*",
-    "@platforma-open/milaboratories.in-vivo-compartment-analysis.model": "workspace:*",
+    "this-block": "workspace:@platforma-open/milaboratories.spatiotemporal-analysis@*",
+    "@platforma-open/milaboratories.spatiotemporal-analysis.model": "workspace:*",
     "@platforma-open/milaboratories.samples-and-data.model": "^2.4.1",
     "@platforma-open/milaboratories.samples-and-data": "^1.12.3",
     "@platforma-open/milaboratories.mixcr-clonotyping-2.model": "^1.20.0",

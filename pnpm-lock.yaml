@@ -86,13 +86,13 @@ importers:
 
   block:
     dependencies:
-      '@platforma-open/milaboratories.in-vivo-compartment-analysis.model':
+      '@platforma-open/milaboratories.spatiotemporal-analysis.model':
         specifier: workspace:*
         version: link:../model
-      '@platforma-open/milaboratories.in-vivo-compartment-analysis.ui':
+      '@platforma-open/milaboratories.spatiotemporal-analysis.ui':
         specifier: workspace:*
         version: link:../ui
-      '@platforma-open/milaboratories.in-vivo-compartment-analysis.workflow':
+      '@platforma-open/milaboratories.spatiotemporal-analysis.workflow':
         specifier: workspace:*
         version: link:../workflow
     devDependencies:
@@ -142,9 +142,6 @@ importers:
 
   test:
     dependencies:
-      '@platforma-open/milaboratories.in-vivo-compartment-analysis.model':
-        specifier: workspace:*
-        version: link:../model
       '@platforma-open/milaboratories.mixcr-clonotyping-2':
         specifier: ^2.12.27
         version: 2.17.5(typescript@5.6.3)
@@ -157,11 +154,14 @@ importers:
       '@platforma-open/milaboratories.samples-and-data.model':
         specifier: ^2.4.1
         version: 2.6.0
+      '@platforma-open/milaboratories.spatiotemporal-analysis.model':
+        specifier: workspace:*
+        version: link:../model
       '@platforma-sdk/model':
         specifier: 'catalog:'
         version: 1.53.15
       this-block:
-        specifier: workspace:@platforma-open/milaboratories.in-vivo-compartment-analysis@*
+        specifier: workspace:@platforma-open/milaboratories.spatiotemporal-analysis@*
         version: link:../block
     devDependencies:
       '@milaboratories/ts-builder':
@@ -191,7 +191,7 @@ importers:
       '@milaboratories/graph-maker':
         specifier: 'catalog:'
         version: 1.1.224(@milaboratories/pl-model-common@1.29.0)(@platforma-sdk/model@1.53.15)(@platforma-sdk/ui-vue@1.54.1(typescript@5.6.3))(d3-dispatch@3.0.1)(d3-path@3.1.0)(d3-scale-chromatic@3.1.0)(typescript@5.6.3)
-      '@platforma-open/milaboratories.in-vivo-compartment-analysis.model':
+      '@platforma-open/milaboratories.spatiotemporal-analysis.model':
         specifier: workspace:*
         version: link:../model
       '@platforma-sdk/model':
@@ -225,7 +225,7 @@ importers:
 
   workflow:
     dependencies:
-      '@platforma-open/milaboratories.in-vivo-compartment-analysis.software':
+      '@platforma-open/milaboratories.spatiotemporal-analysis.software':
         specifier: workspace:*
         version: link:../software
       '@platforma-sdk/workflow-tengo':

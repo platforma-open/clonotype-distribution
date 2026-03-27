@@ -1,4 +1,4 @@
-import { model } from '@platforma-open/milaboratories.in-vivo-compartment-analysis.model';
+import { model } from '@platforma-open/milaboratories.spatiotemporal-analysis.model';
 import { defineApp } from '@platforma-sdk/ui-vue';
 import MainPage from './pages/MainPage.vue';
 import HeatmapPage from './pages/HeatmapPage.vue';
