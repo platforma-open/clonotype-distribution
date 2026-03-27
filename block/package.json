@@ -24,12 +24,16 @@
     },
     "meta": {
       "title": "Spatiotemporal Analysis",
-      "description": "Quantifies how clonotypes or clusters distribute across tissues, timepoints, and subjects. Computes restriction index, dominant compartment, spatial breadth, subject prevalence, temporal shift, and kinetic delta — key metrics for antibody/TCR discovery campaigns.",
-      "tags": [
-        "airr",
-        "downstream"
-      ],
       "url": "https://github.com/platforma-open/spatiotemporal-analysis",
+      "support": "mailto:support@milaboratories.com",
+      "description": "Profiles clonal abundance across tissue compartments, timepoints, and subjects — computing restriction, temporal expansion, and cross-subject convergence metrics.",
+      "longDescription": "file:../docs/description.md",
+      "changelog": "file:../CHANGELOG.md",
+      "tags": [
+        "AIRR",
+        "downstream",
+        "VDJ"
+      ],
       "organization": {
         "name": "MiLaboratories Inc",
         "url": "https://milaboratories.com/"
