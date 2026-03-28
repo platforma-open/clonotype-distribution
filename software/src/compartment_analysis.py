@@ -145,6 +145,8 @@ def compute_clr(df: pl.DataFrame, mode: str, has_subject: bool) -> pl.DataFrame:
 
 def _apply_clr_to_group(df: pl.DataFrame) -> pl.DataFrame:
     """Apply CLR transform to a group of samples."""
+    if df.is_empty():
+        return df
     min_nonzero = df.filter(pl.col("frequency") > 0)["frequency"].min()
     if min_nonzero is None or min_nonzero <= 0:
         min_nonzero = 1e-10
