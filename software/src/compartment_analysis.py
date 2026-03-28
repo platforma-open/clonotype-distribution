@@ -164,7 +164,9 @@ def restriction_index(freq_by_group: np.ndarray) -> float:
     """RI = 1 - H(p) / log2(N)"""
     nonzero = freq_by_group[freq_by_group > 0]
     n = len(nonzero)
-    if n <= 1:
+    if n == 0:
+        return float("nan")
+    if n == 1:
         return 1.0
     h = shannon_entropy(nonzero)
     return 1.0 - h / math.log2(n)
