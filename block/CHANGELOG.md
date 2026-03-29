@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.spatiotemporal-analysis
 
+## 1.1.1
+
+### Patch Changes
+
+- 7960302: Guarantee deterministic CSV output ordering for backend deduplication
+
 ## 1.1.0
 
 ### Minor Changes
