@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.spatiotemporal-analysis
 
+## 1.1.2
+
+### Patch Changes
+
+- 56e90e2: Fix rankingOrder annotations: use standard "decreasing"/"increasing" instead of non-standard "descending"/"ascending"
+
 ## 1.1.1
 
 ### Patch Changes
