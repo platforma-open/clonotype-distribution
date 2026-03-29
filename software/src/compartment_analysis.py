@@ -354,23 +354,21 @@ def compute_temporal_metrics(
     t_count = len(timepoint_order)
 
     if not has_subject or mode == "population":
-        if has_subject:
-            # Average frequency across subjects at each timepoint
-            per_tp = (
-                df.group_by(["elementId", COL_TIMEPOINT])
-                .agg(pl.col("frequency").mean().alias("meanFreq"))
-            )
-        else:
-            per_tp = (
-                df.group_by(["elementId", COL_TIMEPOINT])
-                .agg(pl.col("frequency").mean().alias("meanFreq"))
-            )
+        # Aggregate frequency and raw counts per element per timepoint
+        per_tp = (
+            df.group_by(["elementId", COL_TIMEPOINT])
+            .agg([
+                pl.col("frequency").mean().alias("meanFreq"),
+                pl.col("abundance").mean().alias("meanCount"),
+            ])
+        )
 
         results = []
         for element_id, group in per_tp.group_by("elementId"):
             eid = element_id[0] if isinstance(element_id, tuple) else element_id
             tp_freq = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanFreq"].to_list()))
-            row = _compute_temporal_for_element(eid, tp_freq, timepoint_order, t_count, pseudo_count)
+            tp_counts = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanCount"].to_list()))
+            row = _compute_temporal_for_element(eid, tp_freq, tp_counts, timepoint_order, t_count, pseudo_count)
             results.append(row)
 
         if not results:
@@ -381,14 +379,18 @@ def compute_temporal_metrics(
         # Intra-subject: per-subject metrics then average
         per_tp = (
             df.group_by(["elementId", COL_SUBJECT, COL_TIMEPOINT])
-            .agg(pl.col("frequency").mean().alias("meanFreq"))
+            .agg([
+                pl.col("frequency").mean().alias("meanFreq"),
+                pl.col("abundance").mean().alias("meanCount"),
+            ])
         )
 
         per_subject_temporal = []
         for (element_id, subject), group in per_tp.group_by(["elementId", COL_SUBJECT]):
             eid = element_id if not isinstance(element_id, tuple) else element_id
             tp_freq = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanFreq"].to_list()))
-            row = _compute_temporal_for_element(eid, tp_freq, timepoint_order, t_count, pseudo_count)
+            tp_counts = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanCount"].to_list()))
+            row = _compute_temporal_for_element(eid, tp_freq, tp_counts, timepoint_order, t_count, pseudo_count)
             row[COL_SUBJECT] = subject
             per_subject_temporal.append(row)
 
@@ -418,42 +420,49 @@ def compute_temporal_metrics(
 def _compute_temporal_for_element(
     element_id: str,
     tp_freq: dict[str, float],
+    tp_counts: dict[str, float],
     timepoint_order: list[str],
     t_count: int,
     pseudo_count: float,
 ) -> dict:
-    """Compute temporal metrics for a single element."""
-    freqs = np.array([tp_freq.get(tp, 0.0) for tp in timepoint_order])
+    """Compute temporal metrics for a single element.
 
-    # Peak timepoint
+    Frequencies are used for TSI and peak detection. Raw abundance counts
+    are used for Log2 Peak Delta and Log2 Kinetic Delta (pseudo-count
+    is added to raw counts, not frequencies).
+    """
+    freqs = np.array([tp_freq.get(tp, 0.0) for tp in timepoint_order])
+    counts = np.array([tp_counts.get(tp, 0.0) for tp in timepoint_order])
+
+    # Peak timepoint (by frequency)
     peak_idx = int(np.argmax(freqs))
     peak_tp = timepoint_order[peak_idx]
 
-    # TSI = sum(rank_i * freq_i) / (sum(freq_i) * (T - 1)), 0-indexed ranks
+    # TSI = sum(i * freq_i) / (sum(freq_i) * (T - 1)), 0-indexed positions
     total_freq = freqs.sum()
     if total_freq > 0 and t_count > 1:
-        ranks = np.arange(t_count, dtype=np.float64)
-        tsi = float(np.sum(ranks * freqs) / (total_freq * (t_count - 1)))
+        positions = np.arange(t_count, dtype=np.float64)
+        tsi = float(np.sum(positions * freqs) / (total_freq * (t_count - 1)))
     else:
         tsi = float("nan")
 
-    # Log2 kinetic delta: last-to-first
+    # Log2 Kinetic Delta: last-to-first using RAW COUNTS + pseudo
     nonzero_indices = np.where(freqs > 0)[0]
     if len(nonzero_indices) >= 2:
-        first_freq = float(freqs[nonzero_indices[0]])
-        last_freq = float(freqs[nonzero_indices[-1]])
-        log2kd = math.log2((last_freq + pseudo_count) / (first_freq + pseudo_count))
+        first_count = float(counts[nonzero_indices[0]])
+        last_count = float(counts[nonzero_indices[-1]])
+        log2kd = math.log2((last_count + pseudo_count) / (first_count + pseudo_count))
     elif len(nonzero_indices) == 1:
         log2kd = 0.0
     else:
         log2kd = 0.0
 
-    # Log2 peak delta: peak-to-first
+    # Log2 Peak Delta: peak-to-first using RAW COUNTS + pseudo
     if len(nonzero_indices) >= 1:
-        first_freq = float(freqs[nonzero_indices[0]])
-        peak_freq = float(freqs[peak_idx])
-        if peak_freq > 0 and first_freq > 0:
-            log2pd = math.log2((peak_freq + pseudo_count) / (first_freq + pseudo_count))
+        first_count = float(counts[nonzero_indices[0]])
+        peak_count = float(counts[peak_idx])
+        if peak_count > 0 and first_count > 0:
+            log2pd = math.log2((peak_count + pseudo_count) / (first_count + pseudo_count))
         else:
             log2pd = 0.0
     else:
