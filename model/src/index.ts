@@ -185,33 +185,39 @@ export const model = BlockModelV3.create(dataModel)
     return createPlDataTableV2(ctx, pCols, ctx.data.tableState);
   })
 
-  // Heatmap PFrame + raw columns for graph defaults
+  // Heatmap PFrame + raw columns for graph defaults (only when grouping is configured)
   .outputWithStatus('heatmapPf', (ctx): PFrameHandle | undefined => {
+    if (!ctx.data.groupingColumnRef) return undefined;
     const pCols = ctx.outputs?.resolve('heatmapPf')?.getPColumns();
     if (pCols === undefined) return undefined;
     return createPFrameForGraphs(ctx, pCols);
   })
   .output('heatmapPCols', (ctx) => {
+    if (!ctx.data.groupingColumnRef) return undefined;
     return ctx.outputs?.resolve('heatmapPf')?.getPColumns();
   })
 
-  // Temporal line PFrame + raw columns for graph defaults
+  // Temporal line PFrame + raw columns for graph defaults (only when temporal is configured with 2+ timepoints)
   .outputWithStatus('temporalLinePf', (ctx): PFrameHandle | undefined => {
+    if (!ctx.data.temporalColumnRef || ctx.data.timepointOrder.length < 2) return undefined;
     const pCols = ctx.outputs?.resolve('temporalLinePf')?.getPColumns();
     if (pCols === undefined) return undefined;
     return createPFrameForGraphs(ctx, pCols);
   })
   .output('temporalLinePCols', (ctx) => {
+    if (!ctx.data.temporalColumnRef || ctx.data.timepointOrder.length < 2) return undefined;
     return ctx.outputs?.resolve('temporalLinePf')?.getPColumns();
   })
 
-  // Prevalence histogram PFrame + raw columns for graph defaults
+  // Prevalence histogram PFrame + raw columns for graph defaults (only when subject is configured)
   .outputWithStatus('prevalenceHistogramPf', (ctx): PFrameHandle | undefined => {
+    if (!ctx.data.subjectColumnRef) return undefined;
     const pCols = ctx.outputs?.resolve('prevalenceHistogramPf')?.getPColumns();
     if (pCols === undefined) return undefined;
     return createPFrameForGraphs(ctx, pCols);
   })
   .output('prevalenceHistogramPCols', (ctx) => {
+    if (!ctx.data.subjectColumnRef) return undefined;
     return ctx.outputs?.resolve('prevalenceHistogramPf')?.getPColumns();
   })
 
