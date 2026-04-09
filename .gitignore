@@ -11,6 +11,8 @@ test-dry-run.json
 vite.config.*.timestamp-*
 .DS_Store
 /.idea
+.vscode/sftp.json
+
 
 # Python
 .venv/
