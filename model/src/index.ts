@@ -63,7 +63,7 @@ const dataModel = new DataModelBuilder()
     normalization: 'relative-frequency',
     presenceThreshold: 0,
     minAbundanceThreshold: 0,
-    minSubjectCount: 1,
+    minSubjectCount: 2,
     topN: 20,
     tableState: createPlDataTableStateV2(),
     heatmapState: {

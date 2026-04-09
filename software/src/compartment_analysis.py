@@ -491,11 +491,12 @@ def _compute_temporal_matrix(
     with np.errstate(divide="ignore", invalid="ignore"):
         log2kd = np.where(n_nonzero >= 2, np.log2(last_freq / first_freq), 0.0)
 
-    # Log2 Peak Delta: log2(peak / first_detected)
+    # Log2 Peak Delta: log2(peak / first_detected), clamped to >= 0 per spec
     with np.errstate(divide="ignore", invalid="ignore"):
         log2pd = np.where(
             (n_nonzero >= 1) & (first_freq > 0) & (peak_freq > 0), np.log2(peak_freq / first_freq), 0.0
         )
+        log2pd = np.maximum(log2pd, 0.0)
 
     result_data: dict = {c: wide[c].to_list() for c in id_cols}
     result_data.update(
