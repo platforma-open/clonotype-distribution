@@ -104,49 +104,63 @@ def compute_relative_frequency(df: pl.DataFrame) -> pl.DataFrame:
 
 
 def compute_clr(df: pl.DataFrame, mode: str, has_subject: bool) -> pl.DataFrame:
-    """Compute centered log-ratio transform.
-    Global in population mode, per-subject in intra-subject mode."""
+    """Compute centered log-ratio transform (vectorized).
+
+    Global scope in population mode, per-subject scope in intra-subject mode
+    (affects where ``min(nonzero)`` is computed). ``D`` is always per-sample
+    (number of components within the sample).
+    """
     sample_totals = df.group_by("sampleId").agg(pl.col("abundance").sum().alias("sampleTotal"))
     df = df.join(sample_totals, on="sampleId")
     df = df.filter(pl.col("sampleTotal") > 0)
     df = df.with_columns((pl.col("abundance") / pl.col("sampleTotal")).alias("frequency")).drop("sampleTotal")
 
-    # Multiplicative replacement: delta = 0.65 * min(nonzero) / D
-    # D = number of components (distinct elementIds per group)
-    if mode == "intra-subject" and has_subject:
-        # Per-subject CLR
-        result_dfs = []
-        for _subject, subject_df in df.group_by(COL_SUBJECT):
-            result_dfs.append(_apply_clr_to_group(subject_df))
-        if result_dfs:
-            df = pl.concat(result_dfs)
-    else:
-        # Global CLR
-        df = _apply_clr_to_group(df)
-
-    return df
-
-
-def _apply_clr_to_group(df: pl.DataFrame) -> pl.DataFrame:
-    """Apply CLR transform to a group of samples."""
     if df.is_empty():
         return df
-    min_nonzero = df.filter(pl.col("frequency") > 0)["frequency"].min()
-    if min_nonzero is None or min_nonzero <= 0:
-        min_nonzero = 1e-10
 
-    def clr_transform(group: pl.DataFrame) -> pl.DataFrame:
-        freq = group["frequency"].to_numpy().astype(np.float64)
-        D = len(freq)
-        delta = 0.65 * float(min_nonzero) / D if D > 0 else 1e-10
-        freq = np.where(freq == 0, delta, freq)
-        freq = freq / freq.sum()  # renormalize
-        log_freq = np.log(freq)
-        geo_mean = np.mean(log_freq)
-        clr_vals = log_freq - geo_mean
-        return group.with_columns(pl.Series("frequency", clr_vals))
+    # Scope-bound min of nonzero frequencies — this sets delta in the
+    # multiplicative zero replacement (Martín-Fernández et al.).
+    intra = mode == "intra-subject" and has_subject
+    nonzero_freq = (
+        pl.when(pl.col("frequency") > 0).then(pl.col("frequency")).otherwise(None)
+    )
+    if intra:
+        min_nz_expr = nonzero_freq.min().over(COL_SUBJECT)
+    else:
+        # Global min across the whole DataFrame.
+        min_nz_scalar = df.filter(pl.col("frequency") > 0)["frequency"].min()
+        if min_nz_scalar is None or min_nz_scalar <= 0:
+            min_nz_scalar = 1e-10
+        min_nz_expr = pl.lit(float(min_nz_scalar))
 
-    return df.group_by("sampleId", maintain_order=True).map_groups(clr_transform)
+    df = df.with_columns(
+        pl.when((min_nz_expr.is_null()) | (min_nz_expr <= 0))
+        .then(pl.lit(1e-10))
+        .otherwise(min_nz_expr)
+        .alias("_min_nz"),
+        pl.len().over("sampleId").cast(pl.Float64).alias("_D"),
+    )
+
+    df = df.with_columns(
+        (0.65 * pl.col("_min_nz") / pl.col("_D")).alias("_delta")
+    ).with_columns(
+        pl.when(pl.col("frequency") == 0)
+        .then(pl.col("_delta"))
+        .otherwise(pl.col("frequency"))
+        .alias("_freq_rep")
+    )
+
+    # Renormalize per sample so zero-replaced frequencies still sum to 1.
+    df = df.with_columns(
+        (pl.col("_freq_rep") / pl.col("_freq_rep").sum().over("sampleId")).alias("_freq_norm")
+    )
+
+    # CLR = log(f) - mean(log(f)) within each sample.
+    df = df.with_columns(
+        (pl.col("_freq_norm").log() - pl.col("_freq_norm").log().mean().over("sampleId")).alias("frequency")
+    )
+
+    return df.drop(["_min_nz", "_D", "_delta", "_freq_rep", "_freq_norm"])
 
 
 def shannon_entropy(p: np.ndarray) -> float:
@@ -202,54 +216,144 @@ def compute_grouping_metrics(
         per_subject_metrics.sort(["elementId", COL_SUBJECT]) if len(per_subject_metrics) > 0 else None
     )
 
-    # Pre-compute per-element per-group mean frequency across subjects for consensus tie-breaking (R18)
-    per_element_group_freq = per_subject_grouping.group_by(["elementId", COL_GROUPING]).agg(
-        pl.col("meanFreq").mean().alias("meanFreq")
-    )
-    element_freqs: dict[str, dict[str, float]] = {}
-    for row in per_element_group_freq.iter_rows(named=True):
-        element_freqs.setdefault(row["elementId"], {})[row[COL_GROUPING]] = row["meanFreq"]
-
-    results = []
-    for element_id, group in per_subject_metrics.group_by("elementId"):
-        eid = element_id[0] if isinstance(element_id, tuple) else element_id
-        ris = group["ri"].drop_nulls().to_numpy()
-        dominants = group["dominant"].to_list()
-        n_subjects = len(group)
-
-        enough_subjects = n_subjects >= min_subject_count
-        mean_ri = float(np.mean(ris)) if enough_subjects and len(ris) > 0 else float("nan")
-        std_ri = float(np.std(ris, ddof=1)) if enough_subjects and len(ris) > 1 else float("nan")
-
-        # Consensus dominant: mode, ties broken by highest mean frequency (R18)
-        consensus_dominant = _consensus_dominant(dominants, element_freqs.get(eid))
-
-        # Count dominant per category
-        count_dominant = {cat: 0 for cat in categories}
-        for d in dominants:
-            if d is not None and d in count_dominant:
-                count_dominant[d] += 1
-
-        breadths = group["breadth"].to_numpy()
-        mean_breadth = int(round(float(np.mean(breadths)))) if len(breadths) > 0 else 0
-
-        row: dict = {
-            "elementId": eid,
-            "ri": mean_ri,
-            "dominant": consensus_dominant,
-            "breadth": mean_breadth,
-        }
-        if has_subject:
-            row["consensusDominant"] = consensus_dominant
-            row["meanRi"] = mean_ri
-            row["stdRi"] = std_ri
-        for cat in categories:
-            row[f"countDominantIn_{cat}"] = count_dominant[cat]
-        results.append(row)
-
-    if not results:
+    if per_subject_metrics.is_empty():
         return pl.DataFrame(), per_subject_out
-    return pl.DataFrame(results).sort("elementId"), per_subject_out
+
+    # Vectorized aggregation across subjects: mean/std RI, breadth, nSubjects,
+    # and per-category dominant counts (R19–R21).
+    nan = float("nan")
+    count_dominant_exprs = [
+        pl.col("dominant").eq(cat).sum().cast(pl.Int64).alias(f"countDominantIn_{cat}")
+        for cat in categories
+    ]
+    agg = (
+        per_subject_metrics.group_by("elementId")
+        .agg(
+            pl.col("ri").mean().alias("meanRi"),
+            pl.col("ri").std(ddof=1).alias("stdRi"),
+            pl.col("breadth").mean().alias("_breadthMean"),
+            pl.len().alias("nSubjects"),
+            *count_dominant_exprs,
+        )
+        .with_columns(
+            # R17b: insufficient subjects → NaN for mean/std RI.
+            pl.when(pl.col("nSubjects") >= min_subject_count)
+            .then(pl.col("meanRi"))
+            .otherwise(pl.lit(nan))
+            .fill_null(pl.lit(nan))
+            .alias("meanRi"),
+            pl.when(pl.col("nSubjects") >= min_subject_count)
+            .then(pl.col("stdRi"))
+            .otherwise(pl.lit(nan))
+            .fill_null(pl.lit(nan))
+            .alias("stdRi"),
+            pl.col("_breadthMean").round(0).cast(pl.Int64).alias("breadth"),
+        )
+        .drop("_breadthMean")
+    )
+
+    # Consensus dominant (R18): mode across subjects; ties broken by highest
+    # per-element-per-group mean frequency, then alphabetically.
+    per_element_group_freq = per_subject_grouping.group_by(["elementId", COL_GROUPING]).agg(
+        pl.col("meanFreq").mean().alias("elGroupFreq")
+    )
+    consensus = (
+        per_subject_metrics.filter(pl.col("dominant").is_not_null())
+        .group_by(["elementId", "dominant"])
+        .agg(pl.len().alias("_dcount"))
+        .with_columns(pl.col("_dcount").max().over("elementId").alias("_max"))
+        .filter(pl.col("_dcount") == pl.col("_max"))
+        .join(
+            per_element_group_freq.rename({COL_GROUPING: "dominant"}),
+            on=["elementId", "dominant"],
+            how="left",
+        )
+        .with_columns(pl.col("elGroupFreq").fill_null(0.0))
+        .sort(["elementId", "elGroupFreq", "dominant"], descending=[False, True, False])
+        .unique(subset="elementId", keep="first")
+        .select("elementId", pl.col("dominant").alias("consensusDominant"))
+    )
+
+    agg = agg.join(consensus, on="elementId", how="left").with_columns(
+        pl.col("meanRi").alias("ri"),
+        pl.col("consensusDominant").alias("dominant"),
+    )
+
+    final_cols = [
+        "elementId",
+        "ri",
+        "dominant",
+        "breadth",
+        "consensusDominant",
+        "meanRi",
+        "stdRi",
+        *[f"countDominantIn_{cat}" for cat in categories],
+    ]
+    return agg.select(final_cols).sort("elementId"), per_subject_out
+
+
+def _grouping_metrics_from_wide(
+    wide: pl.DataFrame,
+    categories: list[str],
+    presence_threshold: float,
+    index_cols: list[str],
+) -> pl.DataFrame:
+    """Compute ri/dominant/breadth as Polars expressions across a wide DataFrame.
+
+    wide has one row per (index_cols) and one column per category (meanFreq,
+    zero-filled). Implements R11 (RI), R12 (dominant with alphabetical tie-break),
+    and R13 (breadth).
+    """
+    # Ensure every category exists as a column (pivot omits categories absent
+    # from all rows). Add zero columns for missing ones.
+    missing = [c for c in categories if c not in wide.columns]
+    if missing:
+        wide = wide.with_columns(*[pl.lit(0.0).alias(c) for c in missing])
+
+    total = pl.sum_horizontal(*[pl.col(c) for c in categories])
+
+    # Count nonzero categories per row (N in RI formula).
+    n_nonzero = pl.sum_horizontal(
+        *[pl.when(pl.col(c) > 0).then(1).otherwise(0) for c in categories]
+    )
+
+    # Shannon entropy on normalized proportions: H = -sum(p_i * log2(p_i)) for p_i > 0.
+    h_terms = [
+        pl.when(pl.col(c) > 0)
+        .then(-(pl.col(c) / total) * (pl.col(c) / total).log(base=2))
+        .otherwise(0.0)
+        for c in categories
+    ]
+    h_expr = pl.sum_horizontal(*h_terms)
+
+    # RI = 1 - H/log2(N); edge cases: N=0→NaN, N=1→1.0.
+    ri_expr = (
+        pl.when(n_nonzero == 0)
+        .then(pl.lit(float("nan")))
+        .when(n_nonzero == 1)
+        .then(pl.lit(1.0))
+        .otherwise(1.0 - h_expr / n_nonzero.cast(pl.Float64).log(base=2))
+    )
+
+    # Dominant: alphabetically first column equal to row max (R12).
+    # Build chain in reverse alphabetical order so the alphabetically-first
+    # category ends up as the outermost (first-evaluated) when-branch.
+    max_val = pl.max_horizontal(*[pl.col(c) for c in categories])
+    dominant_expr = pl.lit(None).cast(pl.String)
+    for c in sorted(categories, reverse=True):
+        dominant_expr = pl.when(pl.col(c) == max_val).then(pl.lit(c)).otherwise(dominant_expr)
+    dominant_expr = pl.when(max_val > 0).then(dominant_expr).otherwise(pl.lit(None).cast(pl.String))
+
+    breadth_expr = pl.sum_horizontal(
+        *[pl.when(pl.col(c) > presence_threshold).then(1).otherwise(0) for c in categories]
+    ).cast(pl.Int64)
+
+    return wide.select(
+        *index_cols,
+        ri_expr.alias("ri"),
+        dominant_expr.alias("dominant"),
+        breadth_expr.alias("breadth"),
+    )
 
 
 def _compute_pooled_grouping(
@@ -257,36 +361,15 @@ def _compute_pooled_grouping(
     categories: list[str],
     presence_threshold: float,
 ) -> pl.DataFrame:
-    """Compute grouping metrics without subject dimension."""
-    per_grouping = df.group_by(["elementId", COL_GROUPING]).agg(pl.col("frequency").mean().alias("meanFreq"))
-    results = []
-    for element_id, group in per_grouping.group_by("elementId"):
-        eid = element_id[0] if isinstance(element_id, tuple) else element_id
-        freq_map = dict(zip(group[COL_GROUPING].to_list(), group["meanFreq"].to_list(), strict=True))
-        freq_arr = np.array([freq_map.get(cat, 0.0) for cat in categories])
-
-        ri = restriction_index(freq_arr)
-        # R12: dominant is argmax with alphabetical tie-breaking
-        max_freq = float(freq_arr.max()) if len(freq_arr) > 0 else 0.0
-        if max_freq > 0:
-            tied = [categories[i] for i in range(len(categories)) if freq_arr[i] == max_freq]
-            dominant = sorted(tied)[0]
-        else:
-            dominant = None
-        breadth = int(np.sum(freq_arr > presence_threshold))
-
-        results.append(
-            {
-                "elementId": eid,
-                "ri": ri,
-                "dominant": dominant,
-                "breadth": breadth,
-            }
-        )
-
-    if not results:
+    """Compute grouping metrics without subject dimension (vectorized)."""
+    per_grouping = df.group_by(["elementId", COL_GROUPING]).agg(
+        pl.col("frequency").mean().alias("meanFreq")
+    )
+    if per_grouping.is_empty():
         return pl.DataFrame()
-    return pl.DataFrame(results)
+
+    wide = per_grouping.pivot(on=COL_GROUPING, index="elementId", values="meanFreq").fill_null(0.0)
+    return _grouping_metrics_from_wide(wide, categories, presence_threshold, index_cols=["elementId"])
 
 
 def _compute_per_subject_grouping(
@@ -294,35 +377,16 @@ def _compute_per_subject_grouping(
     categories: list[str],
     presence_threshold: float,
 ) -> pl.DataFrame:
-    """Compute per-subject RI, dominant, breadth."""
-    results = []
-    for (element_id, subject), group in per_subject_grouping.group_by(["elementId", COL_SUBJECT]):
-        freq_map = dict(zip(group[COL_GROUPING].to_list(), group["meanFreq"].to_list(), strict=True))
-        freq_arr = np.array([freq_map.get(cat, 0.0) for cat in categories])
-
-        ri = restriction_index(freq_arr)
-        dominant_idx = int(np.argmax(freq_arr))
-        dominant = categories[dominant_idx] if freq_arr[dominant_idx] > 0 else None
-        # Tie-breaking: alphabetical
-        max_freq = freq_arr[dominant_idx]
-        if max_freq > 0:
-            tied = [categories[i] for i in range(len(categories)) if freq_arr[i] == max_freq]
-            dominant = sorted(tied)[0]
-        breadth = int(np.sum(freq_arr > presence_threshold))
-
-        results.append(
-            {
-                "elementId": element_id,
-                COL_SUBJECT: subject,
-                "ri": ri,
-                "dominant": dominant,
-                "breadth": breadth,
-            }
-        )
-
-    if not results:
+    """Compute per-subject RI, dominant, breadth (vectorized)."""
+    if per_subject_grouping.is_empty():
         return pl.DataFrame()
-    return pl.DataFrame(results)
+
+    wide = per_subject_grouping.pivot(
+        on=COL_GROUPING, index=["elementId", COL_SUBJECT], values="meanFreq"
+    ).fill_null(0.0)
+    return _grouping_metrics_from_wide(
+        wide, categories, presence_threshold, index_cols=["elementId", COL_SUBJECT]
+    )
 
 
 def _consensus_dominant(
@@ -347,6 +411,157 @@ def _consensus_dominant(
     return sorted(tied)[0]
 
 
+def _compute_temporal_for_element(
+    element_id: str,
+    tp_freq: dict[str, float],
+    timepoint_order: list[str],
+    t_count: int,
+) -> dict:
+    """Compute temporal metrics for a single element (tested utility, kept for
+    spec-traceable unit tests). The main pipeline uses the vectorized path in
+    ``_temporal_metrics_from_wide``; this function is not called on the hot
+    path but remains the reference formula implementation.
+
+    All metrics use standard frequencies. Fold-changes (Log2 Peak Delta,
+    Log2 Kinetic Delta) are computed between detected timepoints where
+    frequency is always nonzero by definition.
+    """
+    freqs = np.array([tp_freq.get(tp, 0.0) for tp in timepoint_order])
+
+    peak_idx = int(np.argmax(freqs))
+    peak_tp = timepoint_order[peak_idx]
+
+    total_freq = freqs.sum()
+    if total_freq > 0 and t_count > 1:
+        positions = np.arange(t_count, dtype=np.float64)
+        tsi = float(np.sum(positions * freqs) / (total_freq * (t_count - 1)))
+    else:
+        tsi = float("nan")
+
+    nonzero_indices = np.where(freqs > 0)[0]
+    if len(nonzero_indices) >= 2:
+        first_freq = float(freqs[nonzero_indices[0]])
+        last_freq = float(freqs[nonzero_indices[-1]])
+        log2kd = math.log2(last_freq / first_freq)
+    else:
+        log2kd = 0.0
+
+    if len(nonzero_indices) >= 1:
+        first_freq = float(freqs[nonzero_indices[0]])
+        peak_freq = float(freqs[peak_idx])
+        log2pd = math.log2(peak_freq / first_freq) if first_freq > 0 and peak_freq > 0 else 0.0
+    else:
+        log2pd = 0.0
+
+    return {
+        "elementId": element_id,
+        "peakTimepoint": peak_tp,
+        "temporalShiftIndex": tsi,
+        "log2KineticDelta": log2kd,
+        "log2PeakDelta": log2pd,
+    }
+
+
+def _temporal_metrics_from_wide(
+    wide: pl.DataFrame,
+    timepoint_order: list[str],
+    index_cols: list[str],
+) -> pl.DataFrame:
+    """Compute temporal metrics as Polars expressions over a wide DataFrame.
+
+    wide has one row per (index_cols) and one column per timepoint (meanFreq,
+    zero-filled). Implements R14 (peak timepoint, first-occurrence tie-break),
+    R15 (TSI), R16 (Log2PD), R16a (Log2KD).
+    """
+    # Ensure every timepoint exists as a column (pivot omits timepoints absent
+    # from all rows). Add zero columns for missing ones.
+    missing = [tp for tp in timepoint_order if tp not in wide.columns]
+    if missing:
+        wide = wide.with_columns(*[pl.lit(0.0).alias(tp) for tp in missing])
+
+    t = len(timepoint_order)
+    tp_cols = timepoint_order
+
+    # Max frequency per row — also the peak frequency by definition.
+    max_freq = pl.max_horizontal(*[pl.col(tp) for tp in tp_cols])
+
+    # Peak timepoint: first tp (in order) whose value equals max. Build the
+    # when/then chain in reverse order so index 0 ends up outermost.
+    peak_tp_expr = pl.lit(None).cast(pl.String)
+    for i in reversed(range(t)):
+        peak_tp_expr = (
+            pl.when(pl.col(tp_cols[i]) == max_freq)
+            .then(pl.lit(tp_cols[i]))
+            .otherwise(peak_tp_expr)
+        )
+
+    # TSI = sum(i * f_i) / (sum(f_i) * (T-1)); NaN when total is zero.
+    total_freq = pl.sum_horizontal(*[pl.col(tp) for tp in tp_cols])
+    weighted_sum = pl.sum_horizontal(*[pl.col(tp) * float(i) for i, tp in enumerate(tp_cols)])
+    tsi_expr = (
+        pl.when(total_freq > 0)
+        .then(weighted_sum / (total_freq * float(t - 1)))
+        .otherwise(pl.lit(float("nan")))
+    )
+
+    # First-detected index: scan in reverse so earliest match ends up outermost.
+    first_idx_expr = pl.lit(None).cast(pl.Int64)
+    for i in reversed(range(t)):
+        first_idx_expr = (
+            pl.when(pl.col(tp_cols[i]) > 0)
+            .then(pl.lit(i, dtype=pl.Int64))
+            .otherwise(first_idx_expr)
+        )
+
+    # Last-detected index: scan forward so latest match ends up outermost.
+    last_idx_expr = pl.lit(None).cast(pl.Int64)
+    for i in range(t):
+        last_idx_expr = (
+            pl.when(pl.col(tp_cols[i]) > 0)
+            .then(pl.lit(i, dtype=pl.Int64))
+            .otherwise(last_idx_expr)
+        )
+
+    # Resolve first/last freq by index.
+    first_freq_expr = pl.lit(0.0)
+    for i in range(t):
+        first_freq_expr = (
+            pl.when(first_idx_expr == i).then(pl.col(tp_cols[i])).otherwise(first_freq_expr)
+        )
+    last_freq_expr = pl.lit(0.0)
+    for i in range(t):
+        last_freq_expr = (
+            pl.when(last_idx_expr == i).then(pl.col(tp_cols[i])).otherwise(last_freq_expr)
+        )
+
+    # Detected timepoint count.
+    n_detected = pl.sum_horizontal(
+        *[pl.when(pl.col(tp) > 0).then(1).otherwise(0) for tp in tp_cols]
+    )
+
+    # Log2PD: 0 when nothing detected; otherwise log2(peak/first). With any
+    # detection first_freq > 0 and peak_freq >= first_freq, so safe.
+    log2pd_expr = (
+        pl.when(n_detected == 0)
+        .then(pl.lit(0.0))
+        .otherwise((max_freq / first_freq_expr).log(base=2))
+    )
+    # Log2KD: 0 with fewer than two detected tps; otherwise log2(last/first).
+    log2kd_expr = (
+        pl.when(n_detected < 2)
+        .then(pl.lit(0.0))
+        .otherwise((last_freq_expr / first_freq_expr).log(base=2))
+    )
+
+    return wide.select(
+        *index_cols,
+        peak_tp_expr.alias("peakTimepoint"),
+        tsi_expr.alias("temporalShiftIndex"),
+        log2kd_expr.alias("log2KineticDelta"),
+        log2pd_expr.alias("log2PeakDelta"),
+    )
+
+
 def compute_temporal_metrics(
     df: pl.DataFrame,
     timepoint_order: list[str],
@@ -369,114 +584,65 @@ def compute_temporal_metrics(
     df = df.filter(pl.col(COL_TIMEPOINT).is_not_null() & (pl.col(COL_TIMEPOINT) != ""))
     df = df.filter(pl.col(COL_TIMEPOINT).is_in(timepoint_order))
 
-    t_count = len(timepoint_order)
-
     if not has_subject or mode == "population":
-        per_tp = df.group_by(["elementId", COL_TIMEPOINT]).agg(pl.col("frequency").mean().alias("meanFreq"))
-
-        results = []
-        for element_id, group in per_tp.group_by("elementId"):
-            eid = element_id[0] if isinstance(element_id, tuple) else element_id
-            tp_freq = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanFreq"].to_list(), strict=True))
-            row = _compute_temporal_for_element(eid, tp_freq, timepoint_order, t_count)
-            results.append(row)
-
-        if not results:
-            return pl.DataFrame(), None
-        return pl.DataFrame(results).sort("elementId"), None
-
-    else:
-        # Intra-subject: per-subject metrics then average
-        per_tp = df.group_by(["elementId", COL_SUBJECT, COL_TIMEPOINT]).agg(
+        per_tp = df.group_by(["elementId", COL_TIMEPOINT]).agg(
             pl.col("frequency").mean().alias("meanFreq")
         )
-
-        per_subject_temporal = []
-        for (element_id, subject), group in per_tp.group_by(["elementId", COL_SUBJECT]):
-            eid = element_id if not isinstance(element_id, tuple) else element_id
-            tp_freq = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanFreq"].to_list(), strict=True))
-            row = _compute_temporal_for_element(eid, tp_freq, timepoint_order, t_count)
-            row[COL_SUBJECT] = subject
-            per_subject_temporal.append(row)
-
-        if not per_subject_temporal:
+        if per_tp.is_empty():
             return pl.DataFrame(), None
+        wide = per_tp.pivot(on=COL_TIMEPOINT, index="elementId", values="meanFreq").fill_null(0.0)
+        result = _temporal_metrics_from_wide(wide, timepoint_order, index_cols=["elementId"])
+        return result.sort("elementId"), None
 
-        ps_df = pl.DataFrame(per_subject_temporal).sort(["elementId", COL_SUBJECT])
-        results = []
-        for element_id, group in ps_df.group_by("elementId"):
-            eid = element_id[0] if isinstance(element_id, tuple) else element_id
-            n_subjects = len(group)
-            enough = n_subjects >= min_subject_count
-            # Deterministic mode: pick alphabetically first among most frequent
-            modes = group["peakTimepoint"].mode().sort().to_list()
-            peak_tp = modes[0] if modes else None
-            row = {
-                "elementId": eid,
-                "peakTimepoint": peak_tp,
-                "temporalShiftIndex": float(group["temporalShiftIndex"].mean()) if enough else float("nan"),
-                "log2KineticDelta": float(group["log2KineticDelta"].mean()) if enough else float("nan"),
-                "log2PeakDelta": float(group["log2PeakDelta"].mean()) if enough else float("nan"),
-            }
-            results.append(row)
+    # Intra-subject: per-subject pivot, then aggregate across subjects.
+    per_tp = df.group_by(["elementId", COL_SUBJECT, COL_TIMEPOINT]).agg(
+        pl.col("frequency").mean().alias("meanFreq")
+    )
+    if per_tp.is_empty():
+        return pl.DataFrame(), None
 
-        if not results:
-            return pl.DataFrame(), ps_df
-        return pl.DataFrame(results).sort("elementId"), ps_df
+    wide = per_tp.pivot(
+        on=COL_TIMEPOINT, index=["elementId", COL_SUBJECT], values="meanFreq"
+    ).fill_null(0.0)
+    ps_df = _temporal_metrics_from_wide(
+        wide, timepoint_order, index_cols=["elementId", COL_SUBJECT]
+    ).sort(["elementId", COL_SUBJECT])
 
+    if ps_df.is_empty():
+        return pl.DataFrame(), ps_df
 
-def _compute_temporal_for_element(
-    element_id: str,
-    tp_freq: dict[str, float],
-    timepoint_order: list[str],
-    t_count: int,
-) -> dict:
-    """Compute temporal metrics for a single element.
-
-    All metrics use standard frequencies. Fold-changes (Log2 Peak Delta,
-    Log2 Kinetic Delta) are computed between detected timepoints where
-    frequency is always nonzero by definition.
-    """
-    freqs = np.array([tp_freq.get(tp, 0.0) for tp in timepoint_order])
-
-    # Peak timepoint (by frequency)
-    peak_idx = int(np.argmax(freqs))
-    peak_tp = timepoint_order[peak_idx]
-
-    # TSI = sum(i * freq_i) / (sum(freq_i) * (T - 1)), 0-indexed positions
-    total_freq = freqs.sum()
-    if total_freq > 0 and t_count > 1:
-        positions = np.arange(t_count, dtype=np.float64)
-        tsi = float(np.sum(positions * freqs) / (total_freq * (t_count - 1)))
-    else:
-        tsi = float("nan")
-
-    # Log2 Kinetic Delta: last-detected to first-detected
-    nonzero_indices = np.where(freqs > 0)[0]
-    if len(nonzero_indices) >= 2:
-        first_freq = float(freqs[nonzero_indices[0]])
-        last_freq = float(freqs[nonzero_indices[-1]])
-        log2kd = math.log2(last_freq / first_freq)
-    elif len(nonzero_indices) == 1:
-        log2kd = 0.0
-    else:
-        log2kd = 0.0
-
-    # Log2 Peak Delta: peak to first-detected
-    if len(nonzero_indices) >= 1:
-        first_freq = float(freqs[nonzero_indices[0]])
-        peak_freq = float(freqs[peak_idx])
-        log2pd = math.log2(peak_freq / first_freq) if first_freq > 0 and peak_freq > 0 else 0.0
-    else:
-        log2pd = 0.0
-
-    return {
-        "elementId": element_id,
-        "peakTimepoint": peak_tp,
-        "temporalShiftIndex": tsi,
-        "log2KineticDelta": log2kd,
-        "log2PeakDelta": log2pd,
-    }
+    nan = float("nan")
+    agg = (
+        ps_df.group_by("elementId")
+        .agg(
+            # Deterministic mode: alphabetically first among most frequent.
+            pl.col("peakTimepoint").mode().sort().first().alias("peakTimepoint"),
+            pl.col("temporalShiftIndex").mean().alias("temporalShiftIndex"),
+            pl.col("log2KineticDelta").mean().alias("log2KineticDelta"),
+            pl.col("log2PeakDelta").mean().alias("log2PeakDelta"),
+            pl.len().alias("_nSubjects"),
+        )
+        .with_columns(
+            pl.when(pl.col("_nSubjects") >= min_subject_count)
+            .then(pl.col("temporalShiftIndex"))
+            .otherwise(pl.lit(nan))
+            .fill_null(pl.lit(nan))
+            .alias("temporalShiftIndex"),
+            pl.when(pl.col("_nSubjects") >= min_subject_count)
+            .then(pl.col("log2KineticDelta"))
+            .otherwise(pl.lit(nan))
+            .fill_null(pl.lit(nan))
+            .alias("log2KineticDelta"),
+            pl.when(pl.col("_nSubjects") >= min_subject_count)
+            .then(pl.col("log2PeakDelta"))
+            .otherwise(pl.lit(nan))
+            .fill_null(pl.lit(nan))
+            .alias("log2PeakDelta"),
+        )
+        .drop("_nSubjects")
+        .select("elementId", "peakTimepoint", "temporalShiftIndex", "log2KineticDelta", "log2PeakDelta")
+    )
+    return agg.sort("elementId"), ps_df
 
 
 def compute_subject_prevalence(df: pl.DataFrame, has_subject: bool) -> pl.DataFrame:
@@ -530,7 +696,7 @@ def build_temporal_line_data(
     timepoint_order: list[str],
     top_n: int,
 ) -> pl.DataFrame:
-    """Build temporal line plot data for top N clones ranked by Log2 Peak Delta."""
+    """Build temporal line plot data for top N clones ranked by |Log2 Peak Delta|."""
     df = df.filter(
         pl.col(COL_TIMEPOINT).is_not_null()
         & (pl.col(COL_TIMEPOINT) != "")
@@ -542,33 +708,23 @@ def build_temporal_line_data(
         line_data = df.group_by(["elementId", COL_TIMEPOINT]).agg(pl.col("frequency").mean().alias("frequency"))
         return line_data.rename({COL_TIMEPOINT: "timepointValue"}).sort("elementId", "timepointValue")
 
-    # Compute Log2 Peak Delta per element for ranking
     per_tp = df.group_by(["elementId", COL_TIMEPOINT]).agg(pl.col("frequency").mean().alias("meanFreq"))
-
-    element_scores = []
-    for element_id, group in per_tp.group_by("elementId"):
-        eid = element_id[0] if isinstance(element_id, tuple) else element_id
-        tp_freq = dict(zip(group[COL_TIMEPOINT].to_list(), group["meanFreq"].to_list(), strict=True))
-        freqs = np.array([tp_freq.get(tp, 0.0) for tp in timepoint_order])
-        peak_idx = int(np.argmax(freqs))
-        nonzero = np.where(freqs > 0)[0]
-        if len(nonzero) >= 1:
-            first_freq = float(freqs[nonzero[0]])
-            peak_freq = float(freqs[peak_idx])
-            log2pd = abs(math.log2(peak_freq / first_freq)) if first_freq > 0 and peak_freq > 0 else 0.0
-        else:
-            log2pd = 0.0
-        element_scores.append({"elementId": eid, "score": log2pd})
-
-    if not element_scores:
+    if per_tp.is_empty():
         return pl.DataFrame()
 
-    scores_df = pl.DataFrame(element_scores).sort(["score", "elementId"], descending=[True, False]).head(top_n)
-    top_elements = set(scores_df["elementId"].to_list())
+    # Reuse the vectorized temporal metrics pivot to compute Log2PD for ranking.
+    wide = per_tp.pivot(on=COL_TIMEPOINT, index="elementId", values="meanFreq").fill_null(0.0)
+    metrics = _temporal_metrics_from_wide(wide, timepoint_order, index_cols=["elementId"])
 
-    # Filter to top N elements
+    scores_df = (
+        metrics.select("elementId", pl.col("log2PeakDelta").abs().alias("score"))
+        .sort(["score", "elementId"], descending=[True, False])
+        .head(top_n)
+    )
+    top_elements = scores_df["elementId"].to_list()
+
     line_data = (
-        df.filter(pl.col("elementId").is_in(list(top_elements)))
+        df.filter(pl.col("elementId").is_in(top_elements))
         .group_by(["elementId", COL_TIMEPOINT])
         .agg(pl.col("frequency").mean().alias("frequency"))
     )
