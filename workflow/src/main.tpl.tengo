@@ -4,9 +4,34 @@ assets := import("@platforma-sdk/workflow-tengo:assets")
 xsv := import("@platforma-sdk/workflow-tengo:pframes.xsv")
 pframes := import("@platforma-sdk/workflow-tengo:pframes")
 pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
+slices := import("@platforma-sdk/workflow-tengo:slices")
 json := import("json")
 
 analysisSw := assets.importSoftware("@platforma-open/milaboratories.spatiotemporal-analysis.software:compartment-analysis")
+
+// Cap discrete-filter annotations at 150 unique values: larger cardinalities
+// are usually identifier-like (barcodes, free-text notes) and would bloat
+// the PFrame spec without producing a usable dropdown.
+maxDiscreteValues := 150
+
+// Unique cell values of a column, sorted for spec stability (Tengo map
+// iteration is non-deterministic). Handles JSON non-partitioned data;
+// other shapes yield an empty list, and the caller drops the annotation.
+collectColumnUniques := func(col) {
+	dataJson := col.data.getDataAsJson()
+	seen := {}
+	unique := []
+	if dataJson.data != undefined {
+		for _, v in dataJson.data {
+			key := string(v)
+			if !seen[key] {
+				seen[key] = true
+				unique = append(unique, v)
+			}
+		}
+	}
+	return slices.quickSort(unique)
+}
 
 wf.prepare(func(args) {
 	bundleBuilder := wf.createPBundleBuilder()
@@ -38,27 +63,24 @@ wf.body(func(args) {
 	hasTimepoint := args.temporalColumnRef != undefined
 	hasSubject := args.subjectColumnRef != undefined
 
-	// Forward the grouping column's discrete-values annotation to our
-	// categorical outputs. Lead Selection reads it to render dropdowns.
+	// Derive discrete values by scanning the grouping column directly, so
+	// Lead Selection dropdowns work without upstream annotation. The full
+	// category list is a superset of Dominant Group / Consensus Dominant
+	// output values — may over-include, never miss.
 	groupingDiscreteValues := ""
 	if hasGrouping {
-		groupingSpec := columns.getSpec(args.groupingColumnRef)
-		if groupingSpec.annotations != undefined && groupingSpec.annotations["pl7.app/discreteValues"] != undefined {
-			groupingDiscreteValues = groupingSpec.annotations["pl7.app/discreteValues"]
+		groupingCol := columns.getColumn(args.groupingColumnRef)
+		uniques := collectColumnUniques(groupingCol)
+		if len(uniques) > 0 && len(uniques) <= maxDiscreteValues {
+			groupingDiscreteValues = string(json.encode(uniques))
 		}
 	}
 
-	// Temporal column: use its annotation first; fall back to
-	// args.timepointOrder — the user's canonical Peak Timepoint ordering.
+	// Peak Timepoint: args.timepointOrder is the user's canonical ordering
+	// — authoritative, no scan needed.
 	temporalDiscreteValues := ""
-	if hasTimepoint {
-		temporalSpec := columns.getSpec(args.temporalColumnRef)
-		if temporalSpec.annotations != undefined && temporalSpec.annotations["pl7.app/discreteValues"] != undefined {
-			temporalDiscreteValues = temporalSpec.annotations["pl7.app/discreteValues"]
-		}
-		if temporalDiscreteValues == "" && len(args.timepointOrder) > 0 {
-			temporalDiscreteValues = string(json.encode(args.timepointOrder))
-		}
+	if hasTimepoint && len(args.timepointOrder) > 0 {
+		temporalDiscreteValues = string(json.encode(args.timepointOrder))
 	}
 
 	// Build input CSV with hardcoded column names
