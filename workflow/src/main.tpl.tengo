@@ -5,7 +5,6 @@ xsv := import("@platforma-sdk/workflow-tengo:pframes.xsv")
 pframes := import("@platforma-sdk/workflow-tengo:pframes")
 pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
 json := import("json")
-text := import("text")
 
 analysisSw := assets.importSoftware("@platforma-open/milaboratories.spatiotemporal-analysis.software:compartment-analysis")
 
@@ -128,6 +127,17 @@ wf.body(func(args) {
 		importance: 30,
 		label: traceLabel
 	})
+
+	// Wrap a splitDataAndSpec xsv.importFile result into a traced PFrame.
+	// splitDataAndSpec exposes specs before computation completes so downstream
+	// blocks can configure inputs without waiting for the full workflow.
+	buildTracedPf := func(rawPf) {
+		builder := pframes.pFrameBuilder()
+		for k, v in rawPf {
+			builder.add(k, trace.inject(v.spec), v.data)
+		}
+		return builder.build()
+	}
 
 	// Main import columns
 	mainImportColumns := []
@@ -347,24 +357,14 @@ wf.body(func(args) {
 	}
 
 	mainCsv := runAnalysis.getFile("result_main.csv")
-	mainPfRaw := xsv.importFile(mainCsv, "csv", mainImportParams, {cpu: 1, mem: "8GiB"})
-
-	// Inject trace
-	mainPfBuilder := pframes.pFrameBuilder()
-	for k, v in mainPfRaw {
-		if text.has_suffix(k, ".spec") {
-			dataKey := text.replace(k, ".spec", ".data", 1)
-			colId := text.replace(k, ".spec", "", 1)
-			mainPfBuilder.add(colId, trace.inject(v), mainPfRaw[dataKey])
-		}
-	}
-	mainPf := mainPfBuilder.build()
+	mainPf := buildTracedPf(xsv.importFile(mainCsv, "csv", mainImportParams,
+		{cpu: 1, mem: "8GiB", splitDataAndSpec: true}))
 
 	// Heatmap PFrame
 	heatmapPf := undefined
 	if hasGrouping {
 		heatmapCsv := runAnalysis.getFile("result_heatmap.csv")
-		heatmapPf = xsv.importFile(heatmapCsv, "csv", {
+		heatmapPf = buildTracedPf(xsv.importFile(heatmapCsv, "csv", {
 			axes: [
 				{column: "elementId", spec: elementAxisSpec},
 				{column: "groupCategory", spec: {
@@ -382,14 +382,14 @@ wf.body(func(args) {
 			}],
 			storageFormat: "Parquet",
 			partitionKeyLength: 0
-		}, {cpu: 1, mem: "8GiB"})
+		}, {cpu: 1, mem: "8GiB", splitDataAndSpec: true}))
 	}
 
 	// Temporal line PFrame
 	temporalLinePf := undefined
 	if hasTimepoint && len(args.timepointOrder) >= 2 {
 		temporalLineCsv := runAnalysis.getFile("result_temporal_line.csv")
-		temporalLinePf = xsv.importFile(temporalLineCsv, "csv", {
+		temporalLinePf = buildTracedPf(xsv.importFile(temporalLineCsv, "csv", {
 			axes: [
 				{column: "elementId", spec: elementAxisSpec},
 				{column: "timepointValue", spec: {
@@ -407,14 +407,14 @@ wf.body(func(args) {
 			}],
 			storageFormat: "Parquet",
 			partitionKeyLength: 0
-		}, {cpu: 1, mem: "8GiB"})
+		}, {cpu: 1, mem: "8GiB", splitDataAndSpec: true}))
 	}
 
 	// Prevalence histogram PFrame (only when subject variable is set)
 	prevalenceHistogramPf := undefined
 	if hasSubject {
 		prevalenceHistCsv := runAnalysis.getFile("result_prevalence_histogram.csv")
-		prevalenceHistogramPf = xsv.importFile(prevalenceHistCsv, "csv", {
+		prevalenceHistogramPf = buildTracedPf(xsv.importFile(prevalenceHistCsv, "csv", {
 			axes: [{
 				column: "prevalenceCount",
 				spec: {
@@ -432,7 +432,7 @@ wf.body(func(args) {
 			}],
 			storageFormat: "Parquet",
 			partitionKeyLength: 0
-		}, {cpu: 1, mem: "8GiB"})
+		}, {cpu: 1, mem: "8GiB", splitDataAndSpec: true}))
 	}
 
 	// R3: per-subject detail PFrame (axes: [elementId, subject])
@@ -526,7 +526,7 @@ wf.body(func(args) {
 		}
 
 		perSubjectCsv := runAnalysis.getFile("result_per_subject.csv")
-		perSubjectPfRaw := xsv.importFile(perSubjectCsv, "csv", {
+		perSubjectPf = buildTracedPf(xsv.importFile(perSubjectCsv, "csv", {
 			axes: [
 				{column: "elementId", spec: elementAxisSpec},
 				{column: "subject", spec: {
@@ -538,17 +538,7 @@ wf.body(func(args) {
 			columns: perSubjectColumns,
 			storageFormat: "Parquet",
 			partitionKeyLength: 0
-		}, {cpu: 1, mem: "8GiB"})
-
-		perSubjectPfBuilder := pframes.pFrameBuilder()
-		for k, v in perSubjectPfRaw {
-			if text.has_suffix(k, ".spec") {
-				dataKey := text.replace(k, ".spec", ".data", 1)
-				colId := text.replace(k, ".spec", "", 1)
-				perSubjectPfBuilder.add(colId, trace.inject(v), perSubjectPfRaw[dataKey])
-			}
-		}
-		perSubjectPf = perSubjectPfBuilder.build()
+		}, {cpu: 1, mem: "8GiB", splitDataAndSpec: true}))
 	}
 
 	outputs := {
