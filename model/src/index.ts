@@ -267,14 +267,14 @@ export const model = BlockModelV3.create(dataModel)
     const sections: { type: 'link'; href: `/${string}`; label: string }[] = [
       { type: 'link', href: '/', label: 'Main' },
     ];
+    if (ctx.data.subjectColumnRef !== undefined) {
+      sections.push({ type: 'link', href: '/prevalence', label: 'Subject Prevalence' });
+    }
     if (ctx.data.groupingColumnRef !== undefined) {
       sections.push({ type: 'link', href: '/heatmap', label: 'Distribution Heatmap' });
     }
     if (ctx.data.temporalColumnRef !== undefined) {
       sections.push({ type: 'link', href: '/temporal', label: 'Temporal Trajectory' });
-    }
-    if (ctx.data.subjectColumnRef !== undefined) {
-      sections.push({ type: 'link', href: '/prevalence', label: 'Subject Prevalence' });
     }
     return sections;
   })
