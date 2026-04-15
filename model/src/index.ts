@@ -124,7 +124,7 @@ export const model = BlockModelV3.create(dataModel)
         'pl7.app/abundance/normalized': 'false',
         'pl7.app/abundance/isPrimary': 'true',
       },
-    }], { includeNativeLabel: true }),
+    }], { label: { includeNativeLabel: true } }),
   )
 
   // Metadata column options
