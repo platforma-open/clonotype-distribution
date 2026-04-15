@@ -89,27 +89,21 @@ const dataModel = new DataModelBuilder()
 export const model = BlockModelV3.create(dataModel)
 
   .args<BlockArgs>((data) => {
-    const { abundanceRef, groupingColumnRef, temporalColumnRef, timepointOrder, subjectColumnRef, calculationMode } = data;
+    // Strip UI state; everything else maps 1:1 to BlockArgs.
+    const {
+      tableState: _tableState,
+      heatmapState: _heatmapState,
+      temporalLineState: _temporalLineState,
+      prevalenceHistogramState: _prevalenceHistogramState,
+      ...args
+    } = data;
+    const { abundanceRef, groupingColumnRef, temporalColumnRef, timepointOrder, subjectColumnRef, calculationMode } = args;
     if (abundanceRef === undefined) throw new Error('Abundance ref required');
     const hasGrouping = groupingColumnRef !== undefined;
     const hasTemporal = temporalColumnRef !== undefined && timepointOrder.length >= 2;
     if (!hasGrouping && !hasTemporal) throw new Error('At least grouping or temporal variable required');
     if (calculationMode === 'intra-subject' && subjectColumnRef === undefined) throw new Error('Subject required in intra-subject mode');
-    return {
-      defaultBlockLabel: data.defaultBlockLabel,
-      customBlockLabel: data.customBlockLabel,
-      abundanceRef,
-      calculationMode,
-      groupingColumnRef,
-      temporalColumnRef,
-      timepointOrder,
-      subjectColumnRef,
-      normalization: data.normalization,
-      presenceThreshold: data.presenceThreshold,
-      minAbundanceThreshold: data.minAbundanceThreshold,
-      minSubjectCount: data.minSubjectCount,
-      topN: data.topN,
-    };
+    return args;
   })
 
   // Abundance column options
