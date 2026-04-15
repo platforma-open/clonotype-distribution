@@ -129,8 +129,8 @@ wf.body(func(args) {
 	})
 
 	// Wrap a splitDataAndSpec xsv.importFile result into a traced PFrame.
-	// splitDataAndSpec exposes specs before computation completes so downstream
-	// blocks can configure inputs without waiting for the full workflow.
+	// splitDataAndSpec publishes specs as soon as they're resolved, so downstream
+	// blocks configure their inputs while the Python step still runs.
 	buildTracedPf := func(rawPf) {
 		builder := pframes.pFrameBuilder()
 		for k, v in rawPf {

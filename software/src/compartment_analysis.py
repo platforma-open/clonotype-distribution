@@ -417,10 +417,11 @@ def _compute_temporal_for_element(
     timepoint_order: list[str],
     t_count: int,
 ) -> dict:
-    """Compute temporal metrics for a single element (tested utility, kept for
-    spec-traceable unit tests). The main pipeline uses the vectorized path in
-    ``_temporal_metrics_from_wide``; this function is not called on the hot
-    path but remains the reference formula implementation.
+    """Reference implementation of temporal metrics for a single element.
+
+    The hot path uses the vectorized ``_temporal_metrics_from_wide``; this
+    function stays for spec-traceable unit tests and as the canonical formula
+    reference.
 
     All metrics use standard frequencies. Fold-changes (Log2 Peak Delta,
     Log2 Kinetic Delta) are computed between detected timepoints where
