@@ -38,6 +38,29 @@ wf.body(func(args) {
 	hasTimepoint := args.temporalColumnRef != undefined
 	hasSubject := args.subjectColumnRef != undefined
 
+	// Forward the grouping column's discrete-values annotation to our
+	// categorical outputs. Lead Selection reads it to render dropdowns.
+	groupingDiscreteValues := ""
+	if hasGrouping {
+		groupingSpec := columns.getSpec(args.groupingColumnRef)
+		if groupingSpec.annotations != undefined && groupingSpec.annotations["pl7.app/discreteValues"] != undefined {
+			groupingDiscreteValues = groupingSpec.annotations["pl7.app/discreteValues"]
+		}
+	}
+
+	// Temporal column: use its annotation first; fall back to
+	// args.timepointOrder — the user's canonical Peak Timepoint ordering.
+	temporalDiscreteValues := ""
+	if hasTimepoint {
+		temporalSpec := columns.getSpec(args.temporalColumnRef)
+		if temporalSpec.annotations != undefined && temporalSpec.annotations["pl7.app/discreteValues"] != undefined {
+			temporalDiscreteValues = temporalSpec.annotations["pl7.app/discreteValues"]
+		}
+		if temporalDiscreteValues == "" && len(args.timepointOrder) > 0 {
+			temporalDiscreteValues = string(json.encode(args.timepointOrder))
+		}
+	}
+
 	// Build input CSV with hardcoded column names
 	csvBuilder := pframes.csvFileBuilder()
 	csvBuilder.add(columns.getColumn(args.abundanceRef), {header: "abundance"})
@@ -201,18 +224,22 @@ wf.body(func(args) {
 			}
 		})
 
+		dominantAnnotations := {
+			"pl7.app/label": "Dominant Group",
+			"pl7.app/isDiscreteFilter": "true",
+			"pl7.app/isScore": "true",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "95"
+		}
+		if groupingDiscreteValues != "" {
+			dominantAnnotations["pl7.app/discreteValues"] = groupingDiscreteValues
+		}
 		mainImportColumns = append(mainImportColumns, {
 			column: "dominant", id: "dominant",
 			spec: {
 				name: "pl7.app/vdj/dominantGroup", valueType: "String",
 				domain: varDomain,
-				annotations: {
-					"pl7.app/label": "Dominant Group",
-					"pl7.app/isDiscreteFilter": "true",
-					"pl7.app/isScore": "true",
-					"pl7.app/table/visibility": "default",
-					"pl7.app/table/orderPriority": "95"
-				}
+				annotations: dominantAnnotations
 			}
 		})
 
@@ -232,18 +259,22 @@ wf.body(func(args) {
 		})
 
 		if hasSubject {
+			consensusDominantAnnotations := {
+				"pl7.app/label": "Consensus Dominant",
+				"pl7.app/isDiscreteFilter": "true",
+				"pl7.app/isScore": "true",
+				"pl7.app/table/visibility": "default",
+				"pl7.app/table/orderPriority": "105"
+			}
+			if groupingDiscreteValues != "" {
+				consensusDominantAnnotations["pl7.app/discreteValues"] = groupingDiscreteValues
+			}
 			mainImportColumns = append(mainImportColumns, {
 				column: "consensusDominant", id: "consensusDominant",
 				spec: {
 					name: "pl7.app/vdj/consensusDominantGroup", valueType: "String",
 					domain: varDomain,
-					annotations: {
-						"pl7.app/label": "Consensus Dominant",
-						"pl7.app/isDiscreteFilter": "true",
-						"pl7.app/isScore": "true",
-						"pl7.app/table/visibility": "default",
-						"pl7.app/table/orderPriority": "105"
-					}
+					annotations: consensusDominantAnnotations
 				}
 			})
 
@@ -285,18 +316,22 @@ wf.body(func(args) {
 	if hasTimepoint && len(args.timepointOrder) >= 2 {
 		temporalDomain := {"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId}
 
+		peakTimepointAnnotations := {
+			"pl7.app/label": "Peak Timepoint",
+			"pl7.app/isDiscreteFilter": "true",
+			"pl7.app/isScore": "true",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "85"
+		}
+		if temporalDiscreteValues != "" {
+			peakTimepointAnnotations["pl7.app/discreteValues"] = temporalDiscreteValues
+		}
 		mainImportColumns = append(mainImportColumns, {
 			column: "peakTimepoint", id: "peakTimepoint",
 			spec: {
 				name: "pl7.app/vdj/peakTimepoint", valueType: "String",
 				domain: temporalDomain,
-				annotations: {
-					"pl7.app/label": "Peak Timepoint",
-					"pl7.app/isDiscreteFilter": "true",
-					"pl7.app/isScore": "true",
-					"pl7.app/table/visibility": "default",
-					"pl7.app/table/orderPriority": "85"
-				}
+				annotations: peakTimepointAnnotations
 			}
 		})
 
