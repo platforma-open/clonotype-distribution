@@ -9,10 +9,10 @@ json := import("json")
 
 analysisSw := assets.importSoftware("@platforma-open/milaboratories.spatiotemporal-analysis.software:compartment-analysis")
 
-// Cap discrete-filter annotations at 150 unique values: larger cardinalities
+// Cap discrete-filter annotations at 50 unique values: larger cardinalities
 // are usually identifier-like (barcodes, free-text notes) and would bloat
 // the PFrame spec without producing a usable dropdown.
-maxDiscreteValues := 150
+maxDiscreteValues := 50
 
 // Unique cell values of a column, sorted for spec stability (Tengo map
 // iteration is non-deterministic). Handles JSON non-partitioned data;
@@ -63,16 +63,19 @@ wf.body(func(args) {
 	hasTimepoint := args.temporalColumnRef != undefined
 	hasSubject := args.subjectColumnRef != undefined
 
-	// Derive discrete values by scanning the grouping column directly, so
-	// Lead Selection dropdowns work without upstream annotation. The full
-	// category list is a superset of Dominant Group / Consensus Dominant
-	// output values — may over-include, never miss.
+	// Prefer upstream discreteValues annotation (new samples-and-data attaches
+	// it to String metadata columns). Fall back to local scan for older upstream.
 	groupingDiscreteValues := ""
 	if hasGrouping {
-		groupingCol := columns.getColumn(args.groupingColumnRef)
-		uniques := collectColumnUniques(groupingCol)
-		if len(uniques) > 0 && len(uniques) <= maxDiscreteValues {
-			groupingDiscreteValues = string(json.encode(uniques))
+		groupingSpec := columns.getSpec(args.groupingColumnRef)
+		if groupingSpec.annotations != undefined && groupingSpec.annotations["pl7.app/discreteValues"] != undefined {
+			groupingDiscreteValues = groupingSpec.annotations["pl7.app/discreteValues"]
+		} else {
+			groupingCol := columns.getColumn(args.groupingColumnRef)
+			uniques := collectColumnUniques(groupingCol)
+			if len(uniques) > 0 && len(uniques) <= maxDiscreteValues {
+				groupingDiscreteValues = string(json.encode(uniques))
+			}
 		}
 	}
 
