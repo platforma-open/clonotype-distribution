@@ -1,15 +1,18 @@
+// Spatiotemporal analysis workflow.
+//
+// The outer body runs immediately (no wf.prepare) and delegates to an inner
+// ephemeral "process" template that awaits PColumnBundle (specs, not data).
+// Output specs land in the result pool before upstream data is computed, so
+// downstream blocks can configure their inputs without waiting on this one.
+
 wf := import("@platforma-sdk/workflow-tengo:workflow")
-exec := import("@platforma-sdk/workflow-tengo:exec")
 assets := import("@platforma-sdk/workflow-tengo:assets")
-xsv := import("@platforma-sdk/workflow-tengo:pframes.xsv")
-pframes := import("@platforma-sdk/workflow-tengo:pframes")
-pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
-json := import("json")
-text := import("text")
+render := import("@platforma-sdk/workflow-tengo:render")
 
-analysisSw := assets.importSoftware("@platforma-open/milaboratories.spatiotemporal-analysis.software:compartment-analysis")
+processTpl := assets.importTemplate(":process")
 
-wf.prepare(func(args) {
+wf.body(func(args) {
+	// Build PColumn bundle (deferred — resolves asynchronously)
 	bundleBuilder := wf.createPBundleBuilder()
 	bundleBuilder.addAnchor("main", args.abundanceRef)
 
@@ -23,427 +26,51 @@ wf.prepare(func(args) {
 		bundleBuilder.addSingle(args.subjectColumnRef)
 	}
 
-	return {
-		columns: bundleBuilder.build()
-	}
-})
+	columns := bundleBuilder.build()
 
-wf.body(func(args) {
-	blockId := wf.blockId().getDataAsJson()
-	columns := args.columns
-	abundanceSpec := columns.getSpec(args.abundanceRef)
-	mode := args.calculationMode
-	normalization := args.normalization
-
-	hasGrouping := args.groupingColumnRef != undefined
-	hasTimepoint := args.temporalColumnRef != undefined
-	hasSubject := args.subjectColumnRef != undefined
-
-	// Build input CSV with hardcoded column names
-	csvBuilder := pframes.csvFileBuilder()
-	csvBuilder.add(columns.getColumn(args.abundanceRef), {header: "abundance"})
-	csvBuilder.setAxisHeader(abundanceSpec.axesSpec[0].name, "sampleId")
-	csvBuilder.setAxisHeader(abundanceSpec.axesSpec[1].name, "elementId")
-
-	if hasSubject {
-		csvBuilder.add(columns.getColumn(args.subjectColumnRef), {header: "subject"})
-	}
-	if hasGrouping {
-		csvBuilder.add(columns.getColumn(args.groupingColumnRef), {header: "grouping"})
-	}
-	if hasTimepoint {
-		csvBuilder.add(columns.getColumn(args.temporalColumnRef), {header: "timepoint"})
-	}
-
-	csvBuilder.mem("8GiB")
-	csvBuilder.cpu(1)
-	inputCsv := csvBuilder.build()
-
-	// Run Python analysis
-	runAnalysis := exec.builder().
-		software(analysisSw).
-		mem("8GiB").
-		cpu(4).
-		addFile("input.csv", inputCsv).
-		arg("input.csv").
-		arg("--calculation-mode").arg(mode).
-		arg("--normalization").arg(normalization).
-		arg("--timepoint-order").arg(string(json.encode(args.timepointOrder))).
-		arg("--presence-threshold").arg(string(args.presenceThreshold)).
-		arg("--min-abundance-threshold").arg(string(args.minAbundanceThreshold)).
-		arg("--min-subject-count").arg(string(args.minSubjectCount)).
-		arg("--top-n").arg(string(args.topN)).
-		arg("--output-prefix").arg("result")
-
-	if hasGrouping {
-		runAnalysis = runAnalysis.arg("--has-grouping")
-	}
-	if hasTimepoint {
-		runAnalysis = runAnalysis.arg("--has-timepoint")
-	}
-	if hasSubject {
-		runAnalysis = runAnalysis.arg("--has-subject")
-	}
-
-	runAnalysis = runAnalysis.
-		saveFile("result_main.csv")
-
-	if hasSubject {
-		runAnalysis = runAnalysis.
-			saveFile("result_prevalence.csv").
-			saveFile("result_prevalence_histogram.csv")
-	}
-
-	if hasGrouping {
-		runAnalysis = runAnalysis.
-			saveFile("result_grouping.csv").
-			saveFile("result_heatmap.csv")
-	}
-
-	if hasTimepoint && len(args.timepointOrder) >= 2 {
-		runAnalysis = runAnalysis.
-			saveFile("result_temporal.csv").
-			saveFile("result_temporal_line.csv")
-	}
-
-	runAnalysis = runAnalysis.
-		//printErrStreamToStdout(). <- do not save stdout content as it is unused 
-		//saveStdoutContent(). to prevent CID conflicts
-		run()
-
-	elementAxisSpec := abundanceSpec.axesSpec[1]
-
-	traceLabel := "Clonotype Distribution - " + mode
-	if normalization == "clr" {
-		traceLabel = traceLabel + " (CLR)"
-	}
-	trace := pSpec.makeTrace(abundanceSpec, {
-		type: "milaboratories.spatiotemporal-analysis",
-		importance: 30,
-		label: traceLabel
+	processResult := render.createEphemeral(processTpl, {
+		columns: columns,
+		blockId: wf.blockId().getDataAsJson(),
+		abundanceRef: args.abundanceRef,
+		groupingColumnRef: args.groupingColumnRef,
+		temporalColumnRef: args.temporalColumnRef,
+		subjectColumnRef: args.subjectColumnRef,
+		calculationMode: args.calculationMode,
+		normalization: args.normalization,
+		timepointOrder: args.timepointOrder,
+		presenceThreshold: args.presenceThreshold,
+		minAbundanceThreshold: args.minAbundanceThreshold,
+		minSubjectCount: args.minSubjectCount,
+		topN: args.topN
 	})
 
-	// Main import columns
-	mainImportColumns := []
-
-	// Subject prevalence (only when subject variable is set)
-	if hasSubject {
-		mainImportColumns = append(mainImportColumns, {
-			column: "subjectPrevalence", id: "subjectPrevalence",
-			spec: {
-				name: "pl7.app/vdj/subjectPrevalence", valueType: "Int",
-				domain: {"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId},
-				annotations: {
-					"pl7.app/label": "Subject Prevalence",
-					"pl7.app/isScore": "true",
-					"pl7.app/score/rankingOrder": "decreasing",
-					"pl7.app/score/defaultCutoff": "2",
-					"pl7.app/table/visibility": "default",
-					"pl7.app/table/orderPriority": "110"
-				}
-			}
-		})
-
-		mainImportColumns = append(mainImportColumns, {
-			column: "subjectPrevalenceFraction", id: "subjectPrevalenceFraction",
-			spec: {
-				name: "pl7.app/vdj/subjectPrevalenceFraction", valueType: "Double",
-				domain: {"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId},
-				annotations: {
-					"pl7.app/label": "Subject Prevalence Fraction",
-					"pl7.app/isScore": "true",
-					"pl7.app/score/rankingOrder": "decreasing",
-					"pl7.app/table/visibility": "optional",
-					"pl7.app/table/orderPriority": "109",
-					"pl7.app/format": ".3f"
-				}
-			}
-		})
-	}
-
-	// Grouping metrics
-	if hasGrouping {
-		varDomain := {
-			"pl7.app/vdj/spatiotemporalAnalysis/variable": "Grouping",
-			"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId
-		}
-
-		mainImportColumns = append(mainImportColumns, {
-			column: "ri", id: "ri",
-			spec: {
-				name: "pl7.app/vdj/restrictionIndex", valueType: "Double",
-				domain: varDomain,
-				annotations: {
-					"pl7.app/label": "Restriction Index",
-					"pl7.app/isScore": "true",
-					"pl7.app/score/rankingOrder": "decreasing",
-					"pl7.app/score/defaultCutoff": "0.5",
-					"pl7.app/table/visibility": "default",
-					"pl7.app/table/orderPriority": "100",
-					"pl7.app/format": ".3f"
-				}
-			}
-		})
-
-		mainImportColumns = append(mainImportColumns, {
-			column: "dominant", id: "dominant",
-			spec: {
-				name: "pl7.app/vdj/dominantGroup", valueType: "String",
-				domain: varDomain,
-				annotations: {
-					"pl7.app/label": "Dominant Group",
-					"pl7.app/isDiscreteFilter": "true",
-					"pl7.app/isScore": "true",
-					"pl7.app/table/visibility": "default",
-					"pl7.app/table/orderPriority": "95"
-				}
-			}
-		})
-
-		mainImportColumns = append(mainImportColumns, {
-			column: "breadth", id: "breadth",
-			spec: {
-				name: "pl7.app/vdj/breadth", valueType: "Int",
-				domain: varDomain,
-				annotations: {
-					"pl7.app/label": "Breadth",
-					"pl7.app/isScore": "true",
-					"pl7.app/score/rankingOrder": "decreasing",
-					"pl7.app/table/visibility": "optional",
-					"pl7.app/table/orderPriority": "90"
-				}
-			}
-		})
-
-		if hasSubject {
-			mainImportColumns = append(mainImportColumns, {
-				column: "consensusDominant", id: "consensusDominant",
-				spec: {
-					name: "pl7.app/vdj/consensusDominantGroup", valueType: "String",
-					domain: varDomain,
-					annotations: {
-						"pl7.app/label": "Consensus Dominant",
-						"pl7.app/isDiscreteFilter": "true",
-						"pl7.app/isScore": "true",
-						"pl7.app/table/visibility": "default",
-						"pl7.app/table/orderPriority": "105"
-					}
-				}
-			})
-
-			mainImportColumns = append(mainImportColumns, {
-				column: "meanRi", id: "meanRi",
-				spec: {
-					name: "pl7.app/vdj/meanRestrictionIndex", valueType: "Double",
-					domain: varDomain,
-					annotations: {
-						"pl7.app/label": "Mean RI",
-						"pl7.app/isScore": "true",
-						"pl7.app/score/rankingOrder": "decreasing",
-						"pl7.app/table/visibility": "optional",
-						"pl7.app/table/orderPriority": "65",
-						"pl7.app/format": ".3f"
-					}
-				}
-			})
-
-			mainImportColumns = append(mainImportColumns, {
-				column: "stdRi", id: "stdRi",
-				spec: {
-					name: "pl7.app/vdj/restrictionIndexStdDev", valueType: "Double",
-					domain: varDomain,
-					annotations: {
-						"pl7.app/label": "RI StdDev",
-						"pl7.app/isScore": "true",
-						"pl7.app/score/rankingOrder": "increasing",
-						"pl7.app/table/visibility": "optional",
-						"pl7.app/table/orderPriority": "60",
-						"pl7.app/format": ".3f"
-					}
-				}
-			})
-		}
-	}
-
-	// Temporal columns
-	if hasTimepoint && len(args.timepointOrder) >= 2 {
-		temporalDomain := {"pl7.app/vdj/spatiotemporalAnalysis/blockId": blockId}
-
-		mainImportColumns = append(mainImportColumns, {
-			column: "peakTimepoint", id: "peakTimepoint",
-			spec: {
-				name: "pl7.app/vdj/peakTimepoint", valueType: "String",
-				domain: temporalDomain,
-				annotations: {
-					"pl7.app/label": "Peak Timepoint",
-					"pl7.app/isDiscreteFilter": "true",
-					"pl7.app/isScore": "true",
-					"pl7.app/table/visibility": "default",
-					"pl7.app/table/orderPriority": "85"
-				}
-			}
-		})
-
-		mainImportColumns = append(mainImportColumns, {
-			column: "log2PeakDelta", id: "log2PeakDelta",
-			spec: {
-				name: "pl7.app/vdj/log2PeakDelta", valueType: "Double",
-				domain: temporalDomain,
-				annotations: {
-					"pl7.app/label": "Log2 Peak Delta",
-					"pl7.app/isScore": "true",
-					"pl7.app/score/rankingOrder": "decreasing",
-					"pl7.app/table/visibility": "default",
-					"pl7.app/table/orderPriority": "77",
-					"pl7.app/format": ".2f"
-				}
-			}
-		})
-
-		mainImportColumns = append(mainImportColumns, {
-			column: "temporalShiftIndex", id: "temporalShiftIndex",
-			spec: {
-				name: "pl7.app/vdj/temporalShiftIndex", valueType: "Double",
-				domain: temporalDomain,
-				annotations: {
-					"pl7.app/label": "Temporal Shift Index",
-					"pl7.app/isScore": "true",
-					"pl7.app/score/rankingOrder": "decreasing",
-					"pl7.app/table/visibility": "optional",
-					"pl7.app/table/orderPriority": "80",
-					"pl7.app/format": ".3f"
-				}
-			}
-		})
-
-		mainImportColumns = append(mainImportColumns, {
-			column: "log2KineticDelta", id: "log2KineticDelta",
-			spec: {
-				name: "pl7.app/vdj/log2KineticDelta", valueType: "Double",
-				domain: temporalDomain,
-				annotations: {
-					"pl7.app/label": "Log2 Kinetic Delta",
-					"pl7.app/isScore": "true",
-					"pl7.app/score/rankingOrder": "decreasing",
-					"pl7.app/table/visibility": "optional",
-					"pl7.app/table/orderPriority": "75",
-					"pl7.app/format": ".2f"
-				}
-			}
-		})
-	}
-
-	mainImportParams := {
-		axes: [{column: "elementId", spec: elementAxisSpec}],
-		columns: mainImportColumns,
-		storageFormat: "Parquet",
-		partitionKeyLength: 0
-	}
-
-	mainCsv := runAnalysis.getFile("result_main.csv")
-	mainPfRaw := xsv.importFile(mainCsv, "csv", mainImportParams, {cpu: 1, mem: "8GiB"})
-
-	// Inject trace
-	mainPfBuilder := pframes.pFrameBuilder()
-	for k, v in mainPfRaw {
-		if text.has_suffix(k, ".spec") {
-			dataKey := text.replace(k, ".spec", ".data", 1)
-			colId := text.replace(k, ".spec", "", 1)
-			mainPfBuilder.add(colId, trace.inject(v), mainPfRaw[dataKey])
-		}
-	}
-	mainPf := mainPfBuilder.build()
-
-	// Heatmap PFrame
-	heatmapPf := undefined
-	if hasGrouping {
-		heatmapCsv := runAnalysis.getFile("result_heatmap.csv")
-		heatmapPf = xsv.importFile(heatmapCsv, "csv", {
-			axes: [
-				{column: "elementId", spec: elementAxisSpec},
-				{column: "groupCategory", spec: {
-					name: "pl7.app/vdj/spatiotemporalAnalysis/groupCategory",
-					type: "String",
-					annotations: {"pl7.app/label": "Group"}
-				}}
-			],
-			columns: [{
-				column: "normalizedFrequency", id: "normalizedFrequency",
-				spec: {
-					name: "pl7.app/vdj/normalizedFrequency", valueType: "Double",
-					annotations: {"pl7.app/label": "Relative Frequency", "pl7.app/format": ".4f"}
-				}
-			}],
-			storageFormat: "Parquet",
-			partitionKeyLength: 0
-		}, {cpu: 1, mem: "8GiB"})
-	}
-
-	// Temporal line PFrame
-	temporalLinePf := undefined
-	if hasTimepoint && len(args.timepointOrder) >= 2 {
-		temporalLineCsv := runAnalysis.getFile("result_temporal_line.csv")
-		temporalLinePf = xsv.importFile(temporalLineCsv, "csv", {
-			axes: [
-				{column: "elementId", spec: elementAxisSpec},
-				{column: "timepointValue", spec: {
-					name: "pl7.app/vdj/spatiotemporalAnalysis/timepoint",
-					type: "String",
-					annotations: {"pl7.app/label": "Timepoint"}
-				}}
-			],
-			columns: [{
-				column: "frequency", id: "frequency",
-				spec: {
-					name: "pl7.app/vdj/frequency", valueType: "Double",
-					annotations: {"pl7.app/label": "Frequency", "pl7.app/format": ".6f"}
-				}
-			}],
-			storageFormat: "Parquet",
-			partitionKeyLength: 0
-		}, {cpu: 1, mem: "8GiB"})
-	}
-
-	// Prevalence histogram PFrame (only when subject variable is set)
-	prevalenceHistogramPf := undefined
-	if hasSubject {
-		prevalenceHistCsv := runAnalysis.getFile("result_prevalence_histogram.csv")
-		prevalenceHistogramPf = xsv.importFile(prevalenceHistCsv, "csv", {
-			axes: [{
-				column: "prevalenceCount",
-				spec: {
-					name: "pl7.app/vdj/spatiotemporalAnalysis/prevalenceCount",
-					type: "Int",
-					annotations: {"pl7.app/label": "Number of Subjects"}
-				}
-			}],
-			columns: [{
-				column: "cloneCount", id: "cloneCount",
-				spec: {
-					name: "pl7.app/vdj/cloneCount", valueType: "Int",
-					annotations: {"pl7.app/label": "Number of Clones"}
-				}
-			}],
-			storageFormat: "Parquet",
-			partitionKeyLength: 0
-		}, {cpu: 1, mem: "8GiB"})
-	}
-
 	outputs := {
-		mainPf: pframes.exportFrame(mainPf)
+		mainPf: processResult.output("mainPf")
 	}
-	if prevalenceHistogramPf != undefined {
-		outputs.prevalenceHistogramPf = pframes.exportFrame(prevalenceHistogramPf)
+	if args.subjectColumnRef != undefined {
+		outputs.prevalenceHistogramPf = processResult.output("prevalenceHistogramPf")
 	}
-	if heatmapPf != undefined {
-		outputs.heatmapPf = pframes.exportFrame(heatmapPf)
+	if args.groupingColumnRef != undefined {
+		outputs.heatmapPf = processResult.output("heatmapPf")
 	}
-	if temporalLinePf != undefined {
-		outputs.temporalLinePf = pframes.exportFrame(temporalLinePf)
+	if args.temporalColumnRef != undefined && len(args.timepointOrder) >= 2 {
+		outputs.temporalLinePf = processResult.output("temporalLinePf")
+	}
+
+	// Per-subject detail: intra-subject mode with a subject column and either
+	// a grouping column or a multi-timepoint axis.
+	hasPerSubject := args.calculationMode == "intra-subject" &&
+		args.subjectColumnRef != undefined &&
+		(args.groupingColumnRef != undefined ||
+			(args.temporalColumnRef != undefined && len(args.timepointOrder) >= 2))
+	if hasPerSubject {
+		outputs.perSubjectPf = processResult.output("perSubjectPf")
 	}
 
 	return {
 		outputs: outputs,
-		exports: {pf: mainPf}
+		exports: {
+			pf: processResult.output("pf")
+		}
 	}
 })
