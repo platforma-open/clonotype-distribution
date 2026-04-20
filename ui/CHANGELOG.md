@@ -1,6 +1,6 @@
-# @platforma-open/milaboratories.spatiotemporal-analysis.workflow
+# @platforma-open/milaboratories.spatiotemporal-analysis.ui
 
-## 0.3.0
+## 0.2.0
 
 ### Minor Changes
 
@@ -18,15 +18,4 @@
 ### Patch Changes
 
 - Updated dependencies [55a62fb]
-  - @platforma-open/milaboratories.spatiotemporal-analysis.software@0.3.0
-
-## 0.2.0
-
-### Minor Changes
-
-- 72b5956: Minor bug fix in python code
-
-### Patch Changes
-
-- Updated dependencies [72b5956]
-  - @platforma-open/milaboratories.spatiotemporal-analysis.software@0.2.0
+  - @platforma-open/milaboratories.spatiotemporal-analysis.model@0.2.0

@@ -1,6 +1,6 @@
-# @platforma-open/milaboratories.spatiotemporal-analysis.workflow
+# @platforma-open/milaboratories.spatiotemporal-analysis.model
 
-## 0.3.0
+## 0.2.0
 
 ### Minor Changes
 
@@ -14,19 +14,3 @@
   - **Python test suite.** Add 101 behavioral tests covering grouping restriction, temporal kinetics, cross-subject convergence, CLR normalization, and empty/single-element edge cases — 77 % coverage on `compartment_analysis.py`. Shared fixtures, strengthened assertions.
   - **UI polish.** Reorder sidebar to surface subject prevalence first, hide graph tabs whose driving variable is unset, include the subject name in chart subtitles, and guard conditional output resolves.
   - **Discrete-filter derivation.** Prefer the upstream `pl7.app/discreteValues` annotation on the grouping column (new samples-and-data attaches it) — this fast path requires no data scan and preserves early spec export. For legacy upstreams that lack the annotation, fall back to scanning the grouping column via `col.data.getDataAsJson()`; this blocks the inner template on data availability and delays spec publication for those projects, but keeps the dropdown working. Peak Timepoint uses `args.timepointOrder` directly. Lead Selection renders dropdowns listing the actual categories (e.g. `spleen`, `lung`, `mediastinal lymph node`) instead of free-text fields.
-
-### Patch Changes
-
-- Updated dependencies [55a62fb]
-  - @platforma-open/milaboratories.spatiotemporal-analysis.software@0.3.0
-
-## 0.2.0
-
-### Minor Changes
-
-- 72b5956: Minor bug fix in python code
-
-### Patch Changes
-
-- Updated dependencies [72b5956]
-  - @platforma-open/milaboratories.spatiotemporal-analysis.software@0.2.0
