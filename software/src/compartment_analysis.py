@@ -14,6 +14,20 @@ import numpy as np
 import polars as pl
 
 
+def _js_str(v):
+    """Match JS Number.prototype.toString() so '5.0' -> '5', '6.5' -> '6.5',
+    non-numeric strings pass through unchanged. Needed because the block UI
+    serializes numeric metadata via JS String() ('5'), while polars sink_csv
+    serializes Float64 5.0 as '5.0'; without normalization the two never match."""
+    if v is None or v == "":
+        return v
+    try:
+        f = float(v)
+        return str(int(f)) if f.is_integer() else str(f)
+    except (ValueError, TypeError):
+        return v
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Spatiotemporal analysis")
     parser.add_argument("input_file", help="Input CSV file")
@@ -41,7 +55,21 @@ ABUNDANCE_NULL_VALUES = ["", "NaN", "nan", "NA", "na", "null", "None"]
 
 def read_input(path: str, has_grouping: bool, has_timepoint: bool, min_abundance_threshold: float) -> pl.DataFrame:
     """Read input CSV with proper type handling."""
-    df = pl.read_csv(path, null_values=ABUNDANCE_NULL_VALUES, infer_schema_length=10000)
+    # Force categorical columns to String at read time so polars doesn't infer
+    # Float64 from numeric-looking values (which would later cast to '5.0' and
+    # mismatch the UI's '5').
+    schema_overrides = {}
+    if has_grouping:
+        schema_overrides[COL_GROUPING] = pl.String
+    if has_timepoint:
+        schema_overrides[COL_TIMEPOINT] = pl.String
+    schema_overrides[COL_SUBJECT] = pl.String
+    df = pl.read_csv(
+        path,
+        null_values=ABUNDANCE_NULL_VALUES,
+        infer_schema_length=10000,
+        schema_overrides=schema_overrides,
+    )
 
     # Ensure abundance is Float64, drop null
     df = df.with_columns(pl.col("abundance").cast(pl.Float64))
@@ -53,13 +81,14 @@ def read_input(path: str, has_grouping: bool, has_timepoint: bool, min_abundance
     if min_abundance_threshold > 0:
         df = df.filter(pl.col("abundance").max().over("elementId") >= min_abundance_threshold)
 
-    # Force categorical columns to String
+    # Normalize numeric-looking categorical values so they match the JS String()
+    # representation the UI sends in --timepoint-order (e.g. CSV '5.0' -> '5').
     if has_grouping and COL_GROUPING in df.columns:
-        df = df.with_columns(pl.col(COL_GROUPING).cast(pl.String))
+        df = df.with_columns(pl.col(COL_GROUPING).map_elements(_js_str, return_dtype=pl.String))
     if has_timepoint and COL_TIMEPOINT in df.columns:
-        df = df.with_columns(pl.col(COL_TIMEPOINT).cast(pl.String))
+        df = df.with_columns(pl.col(COL_TIMEPOINT).map_elements(_js_str, return_dtype=pl.String))
     if COL_SUBJECT in df.columns:
-        df = df.with_columns(pl.col(COL_SUBJECT).cast(pl.String))
+        df = df.with_columns(pl.col(COL_SUBJECT).map_elements(_js_str, return_dtype=pl.String))
 
     return df
 
@@ -745,7 +774,7 @@ def main():
     args = parse_args()
 
     df = read_input(args.input_file, args.has_grouping, args.has_timepoint, args.min_abundance_threshold)
-    timepoint_order = json.loads(args.timepoint_order)
+    timepoint_order = [_js_str(t) for t in json.loads(args.timepoint_order)]
     mode = args.calculation_mode
     prefix = args.output_prefix
     has_subject = args.has_subject and COL_SUBJECT in df.columns
