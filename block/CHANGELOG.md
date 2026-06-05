@@ -1,5 +1,13 @@
 # @platforma-open/milaboratories.spatiotemporal-analysis
 
+## 1.2.2
+
+### Patch Changes
+
+- Updated dependencies [21f4cc8]
+  - @platforma-open/milaboratories.spatiotemporal-analysis.workflow@0.3.1
+  - @platforma-open/milaboratories.spatiotemporal-analysis.ui@0.2.1
+
 ## 1.2.1
 
 ### Patch Changes
