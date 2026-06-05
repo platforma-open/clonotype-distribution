@@ -68,8 +68,8 @@ watchEffect(() => {
   const subjectLabel = findLabel(app.model.data.subjectColumnRef);
   if (subjectLabel) parts.push(subjectLabel);
 
-  // CLR is the non-default normalization; surface it so two otherwise-identical
-  // blocks that differ only in normalization stay distinguishable downstream.
+  // CLR is the non-default normalization; surface it so blocks that differ only
+  // in normalization stay distinguishable downstream.
   if (app.model.data.normalization === 'clr') parts.push('CLR');
 
   app.model.data.defaultBlockLabel = parts.join(', ');
