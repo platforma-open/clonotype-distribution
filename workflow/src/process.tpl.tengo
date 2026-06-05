@@ -160,6 +160,9 @@ self.body(func(inputs) {
 	// customBlockLabel || defaultBlockLabel || "Clonotype Distribution". Stamping it
 	// into every output column gives each instance a distinct trace entry, so
 	// downstream label derivation can add a suffix instead of two identical options.
+	// Mode/normalization are deliberately not appended here: mode already rides in via
+	// the UI-derived defaultBlockLabel, a custom label must stay verbatim, and any
+	// distinguishing setting belongs in that UI label, not the trace stamp (§5).
 	trace := pSpec.makeTrace(abundanceSpec, {
 		type: "milaboratories.spatiotemporal-analysis",
 		importance: 30,
