@@ -156,14 +156,14 @@ self.body(func(inputs) {
 
 	elementAxisSpec := abundanceSpec.axesSpec[1]
 
-	traceLabel := "Clonotype Distribution - " + mode
-	if normalization == "clr" {
-		traceLabel = traceLabel + " (CLR)"
-	}
+	// Per-instance label, resolved in main.tpl.tengo as
+	// customBlockLabel || defaultBlockLabel || "Clonotype Distribution". Stamping it
+	// into every output column gives each instance a distinct trace entry, so
+	// downstream label derivation can add a suffix instead of two identical options.
 	trace := pSpec.makeTrace(abundanceSpec, {
 		type: "milaboratories.spatiotemporal-analysis",
 		importance: 30,
-		label: traceLabel
+		label: inputs.blockLabel
 	})
 
 	// Wrap a splitDataAndSpec xsv.importFile result into a traced PFrame.
