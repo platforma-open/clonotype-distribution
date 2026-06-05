@@ -28,9 +28,23 @@ wf.body(func(args) {
 
 	columns := bundleBuilder.build()
 
+	// Per-instance trace label so two Clonotype Distribution blocks on one dataset
+	// stay distinguishable downstream (Lead Selection, etc.): label derivation only
+	// adds a suffix when trace entries differ, so a static label leaves both options
+	// identical. Resolution order below — user override, UI default, static fallback —
+	// follows block-title-and-trace-pattern §5.
+	blockLabel := args.customBlockLabel
+	if blockLabel == undefined || blockLabel == "" {
+		blockLabel = args.defaultBlockLabel
+	}
+	if blockLabel == undefined || blockLabel == "" {
+		blockLabel = "Clonotype Distribution"
+	}
+
 	processResult := render.createEphemeral(processTpl, {
 		columns: columns,
 		blockId: wf.blockId().getDataAsJson(),
+		blockLabel: blockLabel,
 		abundanceRef: args.abundanceRef,
 		groupingColumnRef: args.groupingColumnRef,
 		temporalColumnRef: args.temporalColumnRef,
