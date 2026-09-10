@@ -13,7 +13,7 @@ import { blockSpec as samplesAndDataBlockSpec } from "@platforma-open/milaborato
 import type { BlockArgs as SamplesAndDataBlockArgs } from "@platforma-open/milaboratories.samples-and-data.model";
 import { createPlDataTableStateV2, wrapOutputs } from "@platforma-sdk/model";
 import { awaitStableState, blockTest } from "@platforma-sdk/test";
-import { blockSpec as compartmentAnalysisBlockSpec } from "this-block";
+import { SpatiotemporalAnalysisBlockPointer as compartmentAnalysisBlockSpec } from "this-block";
 
 blockTest(
   "compartment analysis with 3 bulk samples",

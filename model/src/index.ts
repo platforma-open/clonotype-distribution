@@ -1,94 +1,18 @@
-import type { GraphMakerState } from "@milaboratories/graph-maker";
-import type {
-  InferOutputsType,
-  PFrameHandle,
-  PlDataTableStateV2,
-  PlRef,
-  SUniversalPColumnId,
-} from "@platforma-sdk/model";
-import {
-  BlockModelV3,
-  DataModelBuilder,
-  createPFrameForGraphs,
-  createPlDataTableStateV2,
-  createPlDataTableV2,
-} from "@platforma-sdk/model";
+import type { InferOutputsType, PFrameHandle } from "@platforma-sdk/model";
+import { BlockModelV3, createPFrameForGraphs, createPlDataTableV2 } from "@platforma-sdk/model";
+import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
+import { blockDataModel } from "./dataModel";
+import type { BlockArgs } from "./types";
 
-export type BlockArgs = {
-  defaultBlockLabel: string;
-  customBlockLabel: string;
-  abundanceRef?: PlRef;
-  calculationMode: "population" | "intra-subject";
-  groupingColumnRef?: SUniversalPColumnId;
-  temporalColumnRef?: SUniversalPColumnId;
-  timepointOrder: string[];
-  subjectColumnRef?: SUniversalPColumnId;
-  normalization: "relative-frequency" | "clr";
-  presenceThreshold: number;
-  minAbundanceThreshold: number;
-  minSubjectCount: number;
-  topN: number;
-};
+export { blockDataModel } from "./dataModel";
+export type { BlockArgs, BlockData, LegacyUiState } from "./types";
+export type * from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 
-export type BlockData = BlockArgs & {
-  tableState: PlDataTableStateV2;
-  heatmapState: GraphMakerState;
-  temporalLineState: GraphMakerState;
-  prevalenceHistogramState: GraphMakerState;
-};
+export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind })
 
-type LegacyUiState = {
-  tableState: PlDataTableStateV2;
-  heatmapState: GraphMakerState;
-  temporalLineState: GraphMakerState;
-  prevalenceHistogramState: GraphMakerState;
-};
-
-const dataModel = new DataModelBuilder()
-  .from<BlockData>("v1")
-  .upgradeLegacy<BlockArgs, LegacyUiState>(({ args, uiState }) => ({
-    ...args,
-    ...uiState,
-  }))
-  .init(() => ({
-    defaultBlockLabel: "",
-    customBlockLabel: "",
-    calculationMode: "population" as const,
-    timepointOrder: [],
-    normalization: "relative-frequency" as const,
-    presenceThreshold: 0,
-    minAbundanceThreshold: 0,
-    minSubjectCount: 1,
-    topN: 20,
-    tableState: createPlDataTableStateV2(),
-    heatmapState: {
-      title: "Distribution heatmap",
-      template: "heatmap",
-      currentTab: null,
-    },
-    temporalLineState: {
-      title: "Temporal frequency trajectory",
-      template: "curve_dots",
-      currentTab: null,
-      layersSettings: {
-        curve: {
-          smoothing: false,
-        },
-      },
-    },
-    prevalenceHistogramState: {
-      title: "Subject prevalence distribution",
-      template: "bar",
-      currentTab: null,
-      layersSettings: {
-        bar: { fillColor: "#5b9bd5" },
-      },
-    },
-  }));
-
-export const model = BlockModelV3.create(dataModel)
-
-  .args<BlockArgs>((data) => {
+  // The run gate. Throwing surfaces the reason in the UI, which a disabled Run
+  // button would not.
+  .args<BlockArgs>((data): BlockArgs => {
     // Strip UI state; everything else maps 1:1 to BlockArgs.
     const {
       tableState: _tableState,
@@ -114,6 +38,26 @@ export const model = BlockModelV3.create(dataModel)
       throw new Error("Subject required in intra-subject mode");
     return args;
   })
+
+  // Inverse of the kind's init-params contract: every field a user sets by
+  // hand. `defaultBlockLabel` is derived by a watchEffect in
+  // ui/src/pages/MainPage.vue from the chosen columns' option labels, so it is
+  // projected into args (the workflow reads it for the trace) but never
+  // templated.
+  .templateParams((data) => ({
+    abundanceRef: data.abundanceRef,
+    calculationMode: data.calculationMode,
+    subjectColumnRef: data.subjectColumnRef,
+    groupingColumnRef: data.groupingColumnRef,
+    temporalColumnRef: data.temporalColumnRef,
+    timepointOrder: data.timepointOrder,
+    normalization: data.normalization,
+    presenceThreshold: data.presenceThreshold,
+    minAbundanceThreshold: data.minAbundanceThreshold,
+    minSubjectCount: data.minSubjectCount,
+    topN: data.topN,
+    customBlockLabel: data.customBlockLabel,
+  }))
 
   // Abundance column options
   .output("abundanceOptions", (ctx) =>
@@ -288,4 +232,4 @@ export const model = BlockModelV3.create(dataModel)
 
   .done();
 
-export type BlockOutputs = InferOutputsType<typeof model>;
+export type BlockOutputs = InferOutputsType<typeof platforma>;
