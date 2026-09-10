@@ -1,30 +1,31 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-explicit-any */
-import type {
-  BlockData,
-} from '@platforma-open/milaboratories.spatiotemporal-analysis.model';
-import { blockSpec as clonotypingBlockSpec } from '@platforma-open/milaboratories.mixcr-clonotyping-2';
+import type { BlockData } from "@platforma-open/milaboratories.spatiotemporal-analysis.model";
+import { blockSpec as clonotypingBlockSpec } from "@platforma-open/milaboratories.mixcr-clonotyping-2";
 import type {
   BlockArgs as MiXCRClonotypingBlockArgs,
   BlockOutputs as MiXCRClonotypingBlockOutputs,
-} from '@platforma-open/milaboratories.mixcr-clonotyping-2.model';
+} from "@platforma-open/milaboratories.mixcr-clonotyping-2.model";
 import {
   SupportedPresetList,
   uniquePlId,
-} from '@platforma-open/milaboratories.mixcr-clonotyping-2.model';
-import { blockSpec as samplesAndDataBlockSpec } from '@platforma-open/milaboratories.samples-and-data';
-import type { BlockArgs as SamplesAndDataBlockArgs } from '@platforma-open/milaboratories.samples-and-data.model';
-import { createPlDataTableStateV2, wrapOutputs } from '@platforma-sdk/model';
-import { awaitStableState, blockTest } from '@platforma-sdk/test';
-import { blockSpec as compartmentAnalysisBlockSpec } from 'this-block';
+} from "@platforma-open/milaboratories.mixcr-clonotyping-2.model";
+import { blockSpec as samplesAndDataBlockSpec } from "@platforma-open/milaboratories.samples-and-data";
+import type { BlockArgs as SamplesAndDataBlockArgs } from "@platforma-open/milaboratories.samples-and-data.model";
+import { createPlDataTableStateV2, wrapOutputs } from "@platforma-sdk/model";
+import { awaitStableState, blockTest } from "@platforma-sdk/test";
+import { blockSpec as compartmentAnalysisBlockSpec } from "this-block";
 
 blockTest(
-  'compartment analysis with 3 bulk samples',
+  "compartment analysis with 3 bulk samples",
   { timeout: 600000 },
   async ({ rawPrj: project, ml, helpers, expect }) => {
     // Step 1: Set up Samples & Data with 3 samples, metadata for tissue, donor, timepoint
-    const sndBlockId = await project.addBlock('Samples & Data', samplesAndDataBlockSpec);
-    const clonotypingBlockId = await project.addBlock('MiXCR Clonotyping', clonotypingBlockSpec);
-    const compartmentBlockId = await project.addBlock('Compartment Analysis', compartmentAnalysisBlockSpec);
+    const sndBlockId = await project.addBlock("Samples & Data", samplesAndDataBlockSpec);
+    const clonotypingBlockId = await project.addBlock("MiXCR Clonotyping", clonotypingBlockSpec);
+    const compartmentBlockId = await project.addBlock(
+      "Compartment Analysis",
+      compartmentAnalysisBlockSpec,
+    );
 
     const metaColumnDonorId = uniquePlId();
     const metaColumnTissueId = uniquePlId();
@@ -32,72 +33,86 @@ blockTest(
     const dataset1Id = uniquePlId();
 
     const s652_sampleId = uniquePlId();
-    const s652_r1Handle = await helpers.getLocalFileHandle('./assets/SRR11233652_sampledBulk_R1.fastq.gz');
-    const s652_r2Handle = await helpers.getLocalFileHandle('./assets/SRR11233652_sampledBulk_R2.fastq.gz');
+    const s652_r1Handle = await helpers.getLocalFileHandle(
+      "./assets/SRR11233652_sampledBulk_R1.fastq.gz",
+    );
+    const s652_r2Handle = await helpers.getLocalFileHandle(
+      "./assets/SRR11233652_sampledBulk_R2.fastq.gz",
+    );
     const s663_sampleId = uniquePlId();
-    const s663_r1Handle = await helpers.getLocalFileHandle('./assets/SRR11233663_sampledBulk_R1.fastq.gz');
-    const s663_r2Handle = await helpers.getLocalFileHandle('./assets/SRR11233663_sampledBulk_R2.fastq.gz');
+    const s663_r1Handle = await helpers.getLocalFileHandle(
+      "./assets/SRR11233663_sampledBulk_R1.fastq.gz",
+    );
+    const s663_r2Handle = await helpers.getLocalFileHandle(
+      "./assets/SRR11233663_sampledBulk_R2.fastq.gz",
+    );
     const s664_sampleId = uniquePlId();
-    const s664_r1Handle = await helpers.getLocalFileHandle('./assets/SRR11233664_sampledBulk_R1.fastq.gz');
-    const s664_r2Handle = await helpers.getLocalFileHandle('./assets/SRR11233664_sampledBulk_R2.fastq.gz');
+    const s664_r1Handle = await helpers.getLocalFileHandle(
+      "./assets/SRR11233664_sampledBulk_R1.fastq.gz",
+    );
+    const s664_r2Handle = await helpers.getLocalFileHandle(
+      "./assets/SRR11233664_sampledBulk_R2.fastq.gz",
+    );
 
     await project.setBlockArgs(sndBlockId, {
       metadata: [
         {
           id: metaColumnDonorId,
-          label: 'Donor',
+          label: "Donor",
           global: false,
-          valueType: 'String',
+          valueType: "String",
           data: {
-            [s652_sampleId]: 'Mouse-01',
-            [s663_sampleId]: 'Mouse-02',
-            [s664_sampleId]: 'Mouse-02',
+            [s652_sampleId]: "Mouse-01",
+            [s663_sampleId]: "Mouse-02",
+            [s664_sampleId]: "Mouse-02",
           },
         },
         {
           id: metaColumnTissueId,
-          label: 'Tissue',
+          label: "Tissue",
           global: true,
-          valueType: 'String',
+          valueType: "String",
           data: {
-            [s652_sampleId]: 'Spleen',
-            [s663_sampleId]: 'PBMC',
-            [s664_sampleId]: 'Spleen',
+            [s652_sampleId]: "Spleen",
+            [s663_sampleId]: "PBMC",
+            [s664_sampleId]: "Spleen",
           },
         },
         {
           id: metaColumnTimepointId,
-          label: 'Timepoint',
+          label: "Timepoint",
           global: false,
-          valueType: 'String',
+          valueType: "String",
           data: {
-            [s652_sampleId]: 'Day 7',
-            [s663_sampleId]: 'Day 0',
-            [s664_sampleId]: 'Day 7',
+            [s652_sampleId]: "Day 7",
+            [s663_sampleId]: "Day 0",
+            [s664_sampleId]: "Day 7",
           },
         },
       ],
       sampleIds: [s652_sampleId, s663_sampleId, s664_sampleId],
-      sampleLabelColumnLabel: 'Sample Name',
+      sampleLabelColumnLabel: "Sample Name",
       sampleLabels: {
-        [s652_sampleId]: 'SRR11233652',
-        [s663_sampleId]: 'SRR11233663',
-        [s664_sampleId]: 'SRR11233664',
+        [s652_sampleId]: "SRR11233652",
+        [s663_sampleId]: "SRR11233663",
+        [s664_sampleId]: "SRR11233664",
       },
-      datasets: [{
-        id: dataset1Id,
-        label: 'Dataset 1',
-        content: {
-          type: 'Fastq',
-          readIndices: ['R1', 'R2'],
-          gzipped: true,
-          data: {
-            [s652_sampleId]: { R1: s652_r1Handle, R2: s652_r2Handle },
-            [s663_sampleId]: { R1: s663_r1Handle, R2: s663_r2Handle },
-            [s664_sampleId]: { R1: s664_r1Handle, R2: s664_r2Handle },
+      datasets: [
+        {
+          id: dataset1Id,
+          label: "Dataset 1",
+          content: {
+            type: "Fastq",
+            readIndices: ["R1", "R2"],
+            gzipped: true,
+            data: {
+              [s652_sampleId]: { R1: s652_r1Handle, R2: s652_r2Handle },
+              [s663_sampleId]: { R1: s663_r1Handle, R2: s663_r2Handle },
+              [s664_sampleId]: { R1: s664_r1Handle, R2: s664_r2Handle },
+            },
           },
         },
-      }],
+      ],
     } as unknown as SamplesAndDataBlockArgs);
 
     // Step 2: Run Samples & Data
@@ -124,7 +139,9 @@ blockTest(
       200000,
     );
 
-    const clonotypingOutputs1 = wrapOutputs<MiXCRClonotypingBlockOutputs>(clonotypingStableState1.outputs as any);
+    const clonotypingOutputs1 = wrapOutputs<MiXCRClonotypingBlockOutputs>(
+      clonotypingStableState1.outputs as any,
+    );
     expect(clonotypingOutputs1.presets).toBeDefined();
 
     const presets = SupportedPresetList.parse(
@@ -138,8 +155,8 @@ blockTest(
 
     await project.setBlockArgs(clonotypingBlockId, {
       input: clonotypingOutputs1.inputOptions[0].ref,
-      preset: { type: 'name', name: 'neb-human-rna-xcr-umi-nebnext' },
-      chains: ['IGHeavy'],
+      preset: { type: "name", name: "neb-human-rna-xcr-umi-nebnext" },
+      chains: ["IGHeavy"],
     } satisfies MiXCRClonotypingBlockArgs);
 
     await project.runBlock(clonotypingBlockId);
@@ -147,9 +164,11 @@ blockTest(
       clonotypingBlockId,
       300000,
     );
-    const clonotypingOutputs3 = wrapOutputs<MiXCRClonotypingBlockOutputs>(clonotypingStableState3.outputs as any);
+    const clonotypingOutputs3 = wrapOutputs<MiXCRClonotypingBlockOutputs>(
+      clonotypingStableState3.outputs as any,
+    );
     expect(clonotypingOutputs3.reports.isComplete).toEqual(true);
-    console.log('MiXCR Clonotyping completed successfully');
+    console.log("MiXCR Clonotyping completed successfully");
 
     // Step 4: Wait for Compartment Analysis to detect inputs from result pool
     const compartmentState1 = await awaitStableState(
@@ -162,27 +181,40 @@ blockTest(
     // Verify abundance options
     expect(compartmentOutputs1.abundanceOptions?.ok).toBe(true);
     const abundanceOpts = compartmentOutputs1.abundanceOptions?.value ?? [];
-    expect(abundanceOpts.length, 'Should have abundance options').toBeGreaterThan(0);
-    console.log('Abundance options:', abundanceOpts.map((o: any) => o.label));
+    expect(abundanceOpts.length, "Should have abundance options").toBeGreaterThan(0);
+    console.log(
+      "Abundance options:",
+      abundanceOpts.map((o: any) => o.label),
+    );
 
     // Step 4b: Set abundanceRef first so metadata options can resolve
     await project.mutateBlockStorage(compartmentBlockId, {
-      operation: 'update-block-data',
+      operation: "update-block-data",
       value: {
-        defaultBlockLabel: '',
-        customBlockLabel: '',
+        defaultBlockLabel: "",
+        customBlockLabel: "",
         abundanceRef: abundanceOpts[0].ref,
-        calculationMode: 'population',
+        calculationMode: "population",
         timepointOrder: [],
-        normalization: 'relative-frequency',
+        normalization: "relative-frequency",
         presenceThreshold: 0,
         minAbundanceThreshold: 0,
         minSubjectCount: 1,
         topN: 20,
         tableState: createPlDataTableStateV2(),
-        heatmapState: { title: 'Distribution heatmap', template: 'heatmap', currentTab: null },
-        temporalLineState: { title: 'Temporal frequency trajectory', template: 'curve_dots', currentTab: null, layersSettings: { curve: { smoothing: false } } },
-        prevalenceHistogramState: { title: 'Subject prevalence distribution', template: 'bar', currentTab: null, layersSettings: { bar: { fillColor: '#5b9bd5' } } },
+        heatmapState: { title: "Distribution heatmap", template: "heatmap", currentTab: null },
+        temporalLineState: {
+          title: "Temporal frequency trajectory",
+          template: "curve_dots",
+          currentTab: null,
+          layersSettings: { curve: { smoothing: false } },
+        },
+        prevalenceHistogramState: {
+          title: "Subject prevalence distribution",
+          template: "bar",
+          currentTab: null,
+          layersSettings: { bar: { fillColor: "#5b9bd5" } },
+        },
       } satisfies BlockData,
     });
 
@@ -195,40 +227,53 @@ blockTest(
 
     expect(compartmentOutputs1b.metadataOptions?.ok).toBe(true);
     const metadataOpts = compartmentOutputs1b.metadataOptions?.value ?? [];
-    expect(metadataOpts.length, 'Should have metadata options').toBeGreaterThan(0);
-    console.log('Metadata options:', metadataOpts.map((o: any) => o.label));
+    expect(metadataOpts.length, "Should have metadata options").toBeGreaterThan(0);
+    console.log(
+      "Metadata options:",
+      metadataOpts.map((o: any) => o.label),
+    );
 
     // Find metadata columns
-    const tissueOption = metadataOpts.find((o: any) => o.label?.includes('Tissue'));
-    const donorOption = metadataOpts.find((o: any) => o.label?.includes('Donor'));
-    const timepointOption = metadataOpts.find((o: any) => o.label?.includes('Timepoint'));
+    const tissueOption = metadataOpts.find((o: any) => o.label?.includes("Tissue"));
+    const donorOption = metadataOpts.find((o: any) => o.label?.includes("Donor"));
+    const timepointOption = metadataOpts.find((o: any) => o.label?.includes("Timepoint"));
 
-    expect(tissueOption, 'Tissue metadata option').toBeDefined();
-    expect(donorOption, 'Donor metadata option').toBeDefined();
+    expect(tissueOption, "Tissue metadata option").toBeDefined();
+    expect(donorOption, "Donor metadata option").toBeDefined();
 
     // Step 5: Configure Compartment Analysis with full data
     const blockData: BlockData = {
-      defaultBlockLabel: '',
-      customBlockLabel: '',
+      defaultBlockLabel: "",
+      customBlockLabel: "",
       abundanceRef: abundanceOpts[0].ref,
-      calculationMode: 'population',
+      calculationMode: "population",
       groupingColumnRef: tissueOption.value,
       temporalColumnRef: timepointOption?.value,
-      timepointOrder: timepointOption ? ['Day 0', 'Day 7'] : [],
+      timepointOrder: timepointOption ? ["Day 0", "Day 7"] : [],
       subjectColumnRef: donorOption.value,
-      normalization: 'relative-frequency',
+      normalization: "relative-frequency",
       presenceThreshold: 0,
       minAbundanceThreshold: 0,
       minSubjectCount: 2,
       topN: 20,
       tableState: createPlDataTableStateV2(),
-      heatmapState: { title: 'Distribution heatmap', template: 'heatmap', currentTab: null },
-      temporalLineState: { title: 'Temporal frequency trajectory', template: 'curve_dots', currentTab: null, layersSettings: { curve: { smoothing: false } } },
-      prevalenceHistogramState: { title: 'Subject prevalence distribution', template: 'bar', currentTab: null, layersSettings: { bar: { fillColor: '#5b9bd5' } } },
+      heatmapState: { title: "Distribution heatmap", template: "heatmap", currentTab: null },
+      temporalLineState: {
+        title: "Temporal frequency trajectory",
+        template: "curve_dots",
+        currentTab: null,
+        layersSettings: { curve: { smoothing: false } },
+      },
+      prevalenceHistogramState: {
+        title: "Subject prevalence distribution",
+        template: "bar",
+        currentTab: null,
+        layersSettings: { bar: { fillColor: "#5b9bd5" } },
+      },
     };
 
     await project.mutateBlockStorage(compartmentBlockId, {
-      operation: 'update-block-data',
+      operation: "update-block-data",
       value: blockData,
     });
 
@@ -239,18 +284,20 @@ blockTest(
       300000,
     );
 
-    console.log('Compartment Analysis completed');
+    console.log("Compartment Analysis completed");
 
     // Verify outputs
     const finalOutputs = compartmentState2.outputs as Record<string, any>;
-    expect(finalOutputs.mainTable?.ok, 'Main table should be ok').toBe(true);
+    expect(finalOutputs.mainTable?.ok, "Main table should be ok").toBe(true);
 
     // Verify main table has data
     if (finalOutputs.mainTable?.value?.fullTableHandle) {
-      const shape = await ml.driverKit.pFrameDriver.getShape(finalOutputs.mainTable.value.fullTableHandle);
-      console.log('Main table shape:', shape);
-      expect(shape.rows, 'Table should have rows').toBeGreaterThan(0);
-      expect(shape.columns, 'Table should have columns').toBeGreaterThan(0);
+      const shape = await ml.driverKit.pFrameDriver.getShape(
+        finalOutputs.mainTable.value.fullTableHandle,
+      );
+      console.log("Main table shape:", shape);
+      expect(shape.rows, "Table should have rows").toBeGreaterThan(0);
+      expect(shape.columns, "Table should have columns").toBeGreaterThan(0);
     }
   },
 );

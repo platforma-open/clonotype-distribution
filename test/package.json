@@ -1,32 +1,34 @@
 {
   "name": "@platforma-open/milaboratories.spatiotemporal-analysis.test",
-  "private": true,
   "version": "0.2.0",
+  "private": true,
   "description": "Block tests",
+  "keywords": [],
+  "files": [],
   "type": "module",
   "scripts": {
-    "test": "vitest --passWithNoTests",
-    "lint": "eslint .",
-    "type-check": "ts-builder type-check --target block-test"
+    "test": "vitest run --passWithNoTests",
+    "type-check": "ts-builder type-check --target block-test",
+    "fmt": "ts-builder format",
+    "check": "ts-builder check --target block-test"
   },
-  "files": [],
-  "keywords": [],
   "dependencies": {
-    "this-block": "workspace:@platforma-open/milaboratories.spatiotemporal-analysis@*",
-    "@platforma-open/milaboratories.spatiotemporal-analysis.model": "workspace:*",
-    "@platforma-open/milaboratories.samples-and-data.model": "^2.4.1",
-    "@platforma-open/milaboratories.samples-and-data": "^1.12.3",
-    "@platforma-open/milaboratories.mixcr-clonotyping-2.model": "^1.20.0",
     "@platforma-open/milaboratories.mixcr-clonotyping-2": "^2.12.27",
-    "@platforma-sdk/model": "catalog:"
+    "@platforma-open/milaboratories.mixcr-clonotyping-2.model": "^1.20.0",
+    "@platforma-open/milaboratories.samples-and-data": "^1.12.3",
+    "@platforma-open/milaboratories.samples-and-data.model": "^2.4.1",
+    "@platforma-open/milaboratories.spatiotemporal-analysis.model": "workspace:*",
+    "@platforma-sdk/model": "catalog:",
+    "this-block": "workspace:@platforma-open/milaboratories.spatiotemporal-analysis@*"
   },
   "devDependencies": {
     "@milaboratories/ts-builder": "catalog:",
     "@milaboratories/ts-configs": "catalog:",
     "@platforma-sdk/test": "catalog:",
-    "@platforma-sdk/eslint-config": "catalog:",
     "eslint": "catalog:",
-    "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "typescript": "*"
   }
 }
