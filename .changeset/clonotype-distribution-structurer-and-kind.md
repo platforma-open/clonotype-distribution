@@ -2,6 +2,7 @@
 "@platforma-open/milaboratories.spatiotemporal-analysis.model": minor
 "@platforma-open/milaboratories.spatiotemporal-analysis.ui": minor
 "@platforma-open/milaboratories.spatiotemporal-analysis": minor
+"@platforma-open/milaboratories.spatiotemporal-analysis.software": patch
 ---
 
 Adopt the block-tools structure and add the block kind.
