@@ -1,5 +1,12 @@
 # @platforma-open/milaboratories.spatiotemporal-analysis.test
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [57d43ca]
+  - @platforma-open/milaboratories.spatiotemporal-analysis.model@0.3.0
+
 ## 0.2.0
 
 ### Minor Changes

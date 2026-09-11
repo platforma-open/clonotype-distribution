@@ -1,5 +1,19 @@
 # @platforma-open/milaboratories.spatiotemporal-analysis.ui
 
+## 0.3.0
+
+### Minor Changes
+
+- 57d43ca: Adopt the block-tools structure and add the block kind.
+
+  The block gains an init-params contract, so a project template can create it
+  pre-configured, and `platforma` replaces `model` as the model's export.
+
+### Patch Changes
+
+- Updated dependencies [57d43ca]
+  - @platforma-open/milaboratories.spatiotemporal-analysis.model@0.3.0
+
 ## 0.2.1
 
 ### Patch Changes
