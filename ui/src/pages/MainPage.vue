@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { PObjectId, PlRef } from '@platforma-sdk/model';
-import { getSingleColumnData } from '@platforma-sdk/model';
+import type { PObjectId, PlRef } from "@platforma-sdk/model";
+import { getSingleColumnData } from "@platforma-sdk/model";
 import {
   PlAccordion,
   PlAccordionSection,
@@ -16,9 +16,9 @@ import {
   PlSlideModal,
   PlTooltip,
   usePlDataTableSettingsV2,
-} from '@platforma-sdk/ui-vue';
-import { computed, ref, watch, watchEffect } from 'vue';
-import { useApp } from '../app';
+} from "@platforma-sdk/ui-vue";
+import { computed, ref, watch, watchEffect } from "vue";
+import { useApp } from "../app";
 
 const app = useApp();
 
@@ -32,13 +32,13 @@ function setInput(inputRef?: PlRef) {
 }
 
 const calculationModeOptions = [
-  { label: 'Population-Level', value: 'population' },
-  { label: 'Intra-Subject', value: 'intra-subject' },
+  { label: "Population-Level", value: "population" },
+  { label: "Intra-Subject", value: "intra-subject" },
 ];
 
 const normalizationOptions = [
-  { label: 'Relative Frequency', value: 'relative-frequency' },
-  { label: 'CLR Transform', value: 'clr' },
+  { label: "Relative Frequency", value: "relative-frequency" },
+  { label: "CLR Transform", value: "clr" },
 ];
 
 const tableSettings = usePlDataTableSettingsV2({
@@ -57,7 +57,7 @@ watchEffect(() => {
   const parts: string[] = [];
 
   const mode = app.model.data.calculationMode;
-  parts.push(mode === 'intra-subject' ? 'Intra-Subject' : 'Population');
+  parts.push(mode === "intra-subject" ? "Intra-Subject" : "Population");
 
   const groupLabel = findLabel(app.model.data.groupingColumnRef);
   if (groupLabel) parts.push(groupLabel);
@@ -70,13 +70,13 @@ watchEffect(() => {
 
   // CLR is the non-default normalization; surface it so blocks that differ only
   // in normalization stay distinguishable downstream.
-  if (app.model.data.normalization === 'clr') parts.push('CLR');
+  if (app.model.data.normalization === "clr") parts.push("CLR");
 
-  app.model.data.defaultBlockLabel = parts.join(', ');
+  app.model.data.defaultBlockLabel = parts.join(", ");
 });
 
 // Subject is required only in intra-subject mode
-const subjectRequired = computed(() => app.model.data.calculationMode === 'intra-subject');
+const subjectRequired = computed(() => app.model.data.calculationMode === "intra-subject");
 
 // Fetch unique timepoint values from the temporal column via pframe driver
 const timepointValues = ref<string[]>([]);
@@ -93,11 +93,9 @@ watch(
     }
     try {
       const colData = await getSingleColumnData(pframe, colId as PObjectId);
-      const unique = [...new Set(
-        colData.data
-          .filter((v): v is string | number => v != null)
-          .map(String),
-      )].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      const unique = [
+        ...new Set(colData.data.filter((v): v is string | number => v != null).map(String)),
+      ].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       timepointValues.value = unique;
     } catch {
       timepointValues.value = [];
@@ -191,8 +189,8 @@ const isAdvancedOpen = ref(false);
       clearable
     >
       <template #tooltip>
-        Required for Intra-Subject mode. Optional in Population-Level mode —
-        when omitted, all samples are pooled and cross-subject metrics are skipped.
+        Required for Intra-Subject mode. Optional in Population-Level mode — when omitted, all
+        samples are pooled and cross-subject metrics are skipped.
       </template>
     </PlDropdown>
 
@@ -203,8 +201,8 @@ const isAdvancedOpen = ref(false);
       clearable
     >
       <template #tooltip>
-        Categorical metadata column (e.g. tissue, organ) used to compute
-        distribution metrics: restriction index, dominant group, and breadth.
+        Categorical metadata column (e.g. tissue, organ) used to compute distribution metrics:
+        restriction index, dominant group, and breadth.
       </template>
     </PlDropdown>
 
@@ -215,9 +213,8 @@ const isAdvancedOpen = ref(false);
       clearable
     >
       <template #tooltip>
-        Ordered metadata column (e.g. timepoint, day) used to compute
-        temporal expansion metrics: Log2 Peak Delta, Temporal Shift Index,
-        and Log2 Kinetic Delta.
+        Ordered metadata column (e.g. timepoint, day) used to compute temporal expansion metrics:
+        Log2 Peak Delta, Temporal Shift Index, and Log2 Kinetic Delta.
       </template>
     </PlDropdown>
 
@@ -227,16 +224,15 @@ const isAdvancedOpen = ref(false);
         v-model="isTimepointOrderOpen"
         label="Timepoint order"
       >
-        <div style="display: flex; margin-bottom: -15px;">
+        <div style="display: flex; margin-bottom: -15px">
           Define timepoint order
           <PlTooltip class="info">
             <template #label>Define timepoint order</template>
             <template #tooltip>
               <div>
-                Drag to reorder timepoints chronologically.
-                The order determines how temporal metrics
-                (TSI, Log2 Peak Delta, Log2 Kinetic Delta)
-                are computed. First = earliest, last = latest.
+                Drag to reorder timepoints chronologically. The order determines how temporal
+                metrics (TSI, Log2 Peak Delta, Log2 Kinetic Delta) are computed. First = earliest,
+                last = latest.
               </div>
             </template>
           </PlTooltip>
@@ -246,10 +242,7 @@ const isAdvancedOpen = ref(false);
             {{ item }}
           </template>
         </PlElementList>
-        <PlBtnGhost
-          v-if="availableTimepointsToAdd.length > 0"
-          @click="resetTimepointOrder"
-        >
+        <PlBtnGhost v-if="availableTimepointsToAdd.length > 0" @click="resetTimepointOrder">
           Reset to default
           <template #append>
             <PlMaskIcon24 name="reverse" />
@@ -271,8 +264,8 @@ const isAdvancedOpen = ref(false);
           :step="1"
         >
           <template #tooltip>
-            Filter clones with abundance below this value in ALL samples before computation.
-            Default 0 includes everything.
+            Filter clones with abundance below this value in ALL samples before computation. Default
+            0 includes everything.
           </template>
         </PlNumberField>
 
@@ -283,8 +276,8 @@ const isAdvancedOpen = ref(false);
           :step="1"
         >
           <template #tooltip>
-            Averaged cross-subject metrics (Mean RI, Mean Log2PD, etc.) are set to NaN
-            when a clone is present in fewer subjects than this threshold. Default: 1 (no filtering).
+            Averaged cross-subject metrics (Mean RI, Mean Log2PD, etc.) are set to NaN when a clone
+            is present in fewer subjects than this threshold. Default: 1 (no filtering).
           </template>
         </PlNumberField>
 
@@ -295,8 +288,8 @@ const isAdvancedOpen = ref(false);
           :step="1"
         >
           <template #tooltip>
-            Number of top clones to show in the temporal trajectory plot,
-            ranked by absolute Log2 Peak Delta. Default: 20.
+            Number of top clones to show in the temporal trajectory plot, ranked by absolute Log2
+            Peak Delta. Default: 20.
           </template>
         </PlNumberField>
 
@@ -308,8 +301,8 @@ const isAdvancedOpen = ref(false);
           :step="0.0001"
         >
           <template #tooltip>
-            Minimum frequency for a clone to be considered present in a group.
-            Default 0 means any detection counts.
+            Minimum frequency for a clone to be considered present in a group. Default 0 means any
+            detection counts.
           </template>
         </PlNumberField>
       </PlAccordionSection>
