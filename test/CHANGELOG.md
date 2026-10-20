@@ -1,5 +1,13 @@
 # @platforma-open/milaboratories.spatiotemporal-analysis.test
 
+## 0.2.2
+
+### Patch Changes
+
+- e5bf7da: Release every package through npm trusted publishing (OIDC) so each package's trusted publisher is used before it expires.
+- Updated dependencies [e5bf7da]
+  - @platforma-open/milaboratories.spatiotemporal-analysis.model@0.3.1
+
 ## 0.2.1
 
 ### Patch Changes
