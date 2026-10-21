@@ -8,13 +8,15 @@
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 assets := import("@platforma-sdk/workflow-tengo:assets")
 render := import("@platforma-sdk/workflow-tengo:render")
+columnValue := import("@platforma-sdk/workflow-tengo:workflow.column-value")
 
 processTpl := assets.importTemplate(":process")
 
 wf.body(func(args) {
-	// Build PColumn bundle (deferred — resolves asynchronously)
+	// Build PColumn bundle (deferred — resolves asynchronously). Every column arrives as a
+	// result-pool column id.
 	bundleBuilder := wf.createPBundleBuilder()
-	bundleBuilder.addAnchor("main", args.abundanceRef)
+	bundleBuilder.addSingle(args.abundanceRef)
 
 	if args.groupingColumnRef != undefined {
 		bundleBuilder.addSingle(args.groupingColumnRef)
@@ -27,6 +29,14 @@ wf.body(func(args) {
 	}
 
 	columns := bundleBuilder.build()
+
+	// Picked timepoints arrive as column value ids of the temporal column; the analysis takes the
+	// plain values, as text: numeric timepoints too, as the temporal column's cells are written
+	// to the analysis input as text.
+	timepointOrder := []
+	for value in columnValue.valuesOf(args.timepointOrder) {
+		timepointOrder = append(timepointOrder, string(value))
+	}
 
 	// Per-instance trace label so two Clonotype Distribution blocks on one dataset
 	// stay distinguishable downstream (Lead Selection, etc.): label derivation only
@@ -51,7 +61,7 @@ wf.body(func(args) {
 		subjectColumnRef: args.subjectColumnRef,
 		calculationMode: args.calculationMode,
 		normalization: args.normalization,
-		timepointOrder: args.timepointOrder,
+		timepointOrder: timepointOrder,
 		presenceThreshold: args.presenceThreshold,
 		minAbundanceThreshold: args.minAbundanceThreshold,
 		minSubjectCount: args.minSubjectCount,

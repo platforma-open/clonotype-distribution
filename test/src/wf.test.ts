@@ -11,7 +11,7 @@ import {
 } from "@platforma-open/milaboratories.mixcr-clonotyping-2.model";
 import { blockSpec as samplesAndDataBlockSpec } from "@platforma-open/milaboratories.samples-and-data";
 import type { BlockArgs as SamplesAndDataBlockArgs } from "@platforma-open/milaboratories.samples-and-data.model";
-import { createPlDataTableStateV2, wrapOutputs } from "@platforma-sdk/model";
+import { createColumnValueIds, createPlDataTableStateV2, wrapOutputs } from "@platforma-sdk/model";
 import { awaitStableState, blockTest } from "@platforma-sdk/test";
 import { SpatiotemporalAnalysisBlockPointer as compartmentAnalysisBlockSpec } from "this-block";
 
@@ -193,7 +193,7 @@ blockTest(
       value: {
         defaultBlockLabel: "",
         customBlockLabel: "",
-        abundanceRef: abundanceOpts[0].ref,
+        abundanceRef: abundanceOpts[0].value,
         calculationMode: "population",
         timepointOrder: [],
         normalization: "relative-frequency",
@@ -245,11 +245,13 @@ blockTest(
     const blockData: BlockData = {
       defaultBlockLabel: "",
       customBlockLabel: "",
-      abundanceRef: abundanceOpts[0].ref,
+      abundanceRef: abundanceOpts[0].value,
       calculationMode: "population",
       groupingColumnRef: tissueOption.value,
       temporalColumnRef: timepointOption?.value,
-      timepointOrder: timepointOption ? ["Day 0", "Day 7"] : [],
+      timepointOrder: timepointOption
+        ? createColumnValueIds({ column: timepointOption.value, values: ["Day 0", "Day 7"] })
+        : [],
       subjectColumnRef: donorOption.value,
       normalization: "relative-frequency",
       presenceThreshold: 0,
