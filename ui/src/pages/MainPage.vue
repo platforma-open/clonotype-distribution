@@ -14,11 +14,11 @@ import {
   PlSlideModal,
   PlTooltip,
   PlValueLabel,
-  useColumnValueOptions,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed, ref, watch, watchEffect } from "vue";
 import { useApp } from "../app";
+import { useTimepointValues } from "../timepoint_values";
 
 const app = useApp();
 
@@ -74,7 +74,7 @@ watchEffect(() => {
 const subjectRequired = computed(() => app.model.data.calculationMode === "intra-subject");
 
 /** The values of the temporal column picked now, as far as they are read. */
-const timepointValuesState = useColumnValueOptions({
+const timepointValuesState = useTimepointValues({
   source: () => app.model.outputs.timepointValues,
   column: () => app.model.data.temporalColumnRef,
 });

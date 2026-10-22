@@ -6,21 +6,17 @@ import type {
   ArgsIssue,
   TreeNodeAccessor,
 } from "@platforma-sdk/model";
-import {
-  BlockModelV3,
-  createColumnValuesSource,
-  createPFrameForGraphs,
-  createPlDataTableV3,
-} from "@platforma-sdk/model";
+import { BlockModelV3, createPFrameForGraphs, createPlDataTableV3 } from "@platforma-sdk/model";
 import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 import { getAbundanceOptions } from "./abundance";
 import { findColumn, getOutputColumns, toIdsAndSpecs, toPColumns } from "./columns";
 import { blockDataModel } from "./dataModel";
-import { getMetadataOptions } from "./metadata";
+import { getMetadataColumnFrame, getMetadataOptions } from "./metadata";
 import type { BlockArgs } from "./types";
 
 export { blockDataModel } from "./dataModel";
 export type { ColumnPickerOption } from "./columns";
+export type { MetadataColumnFrame } from "./metadata";
 export type { BlockArgs, BlockData, LegacyUiState } from "./types";
 export type * from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 
@@ -105,7 +101,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   .output("timepointValues", (ctx) => {
     const temporalColumnRef = ctx.data.temporalColumnRef;
     if (temporalColumnRef === undefined) return undefined;
-    return createColumnValuesSource(ctx, temporalColumnRef);
+    return getMetadataColumnFrame(ctx, temporalColumnRef);
   })
 
   // Main output table
