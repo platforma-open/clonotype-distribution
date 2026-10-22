@@ -3,26 +3,29 @@ import type {
   PColumnIdAndSpec,
   PFrameHandle,
   RenderCtxBase,
+  ArgsIssue,
   TreeNodeAccessor,
 } from "@platforma-sdk/model";
-import { BlockModelV3, createPFrameForGraphs, createPlDataTableV3 } from "@platforma-sdk/model";
+import {
+  BlockModelV3,
+  createColumnValuesSource,
+  createPFrameForGraphs,
+  createPlDataTableV3,
+} from "@platforma-sdk/model";
 import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 import { getAbundanceOptions } from "./abundance";
 import { findColumn, getOutputColumns, toIdsAndSpecs, toPColumns } from "./columns";
 import { blockDataModel } from "./dataModel";
-import { getMetadataOptions, getTimepointOptions } from "./metadata";
+import { getMetadataOptions } from "./metadata";
 import type { BlockArgs } from "./types";
 
 export { blockDataModel } from "./dataModel";
 export type { ColumnPickerOption } from "./columns";
-export type { TimepointOptions } from "./metadata";
 export type { BlockArgs, BlockData, LegacyUiState } from "./types";
 export type * from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 
 export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind })
 
-  // The run gate. Throwing surfaces the reason in the UI, which a disabled Run
-  // button would not.
   .args<BlockArgs>((data): BlockArgs => {
     // Strip UI state; everything else maps 1:1 to BlockArgs.
     const {
@@ -32,6 +35,12 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
       prevalenceHistogramState: _prevalenceHistogramState,
       ...args
     } = data;
+    return args;
+  })
+
+  // The run gate: the block runs only once the abundance column, an axis to compare
+  // along, and (in intra-subject mode) the subject column are chosen.
+  .argsIssues(({ args }): ArgsIssue[] => {
     const {
       abundanceRef,
       groupingColumnRef,
@@ -40,14 +49,19 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
       subjectColumnRef,
       calculationMode,
     } = args;
-    if (abundanceRef === undefined) throw new Error("Abundance ref required");
+    const issues: ArgsIssue[] = [];
+    if (abundanceRef === undefined)
+      issues.push({ severity: "error", message: "Abundance ref required" });
     const hasGrouping = groupingColumnRef !== undefined;
     const hasTemporal = temporalColumnRef !== undefined && timepointOrder.length >= 2;
     if (!hasGrouping && !hasTemporal)
-      throw new Error("At least grouping or temporal variable required");
+      issues.push({
+        severity: "error",
+        message: "At least grouping or temporal variable required",
+      });
     if (calculationMode === "intra-subject" && subjectColumnRef === undefined)
-      throw new Error("Subject required in intra-subject mode");
-    return args;
+      issues.push({ severity: "error", message: "Subject required in intra-subject mode" });
+    return issues;
   })
 
   // Inverse of the kind's init-params contract: every field a user sets by
@@ -87,8 +101,12 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
     return findColumn(ctx, abundanceRef)?.getSpec();
   })
 
-  // Options of the timepoint order: the values of the temporal column
-  .output("timepointOptions", (ctx) => getTimepointOptions(ctx, ctx.data.temporalColumnRef))
+  // Where the UI reads the values of the temporal column from: they are the timepoints to order
+  .output("timepointValues", (ctx) => {
+    const temporalColumnRef = ctx.data.temporalColumnRef;
+    if (temporalColumnRef === undefined) return undefined;
+    return createColumnValuesSource(ctx, temporalColumnRef);
+  })
 
   // Main output table
   .outputWithStatus("mainTable", (ctx) => {

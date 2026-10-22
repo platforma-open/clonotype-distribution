@@ -3,16 +3,18 @@ import {
   PlAccordion,
   PlAccordionSection,
   PlAgDataTableV2,
+  PlAlert,
   PlBlockPage,
   PlBtnGhost,
   PlBtnGroup,
   PlDropdown,
   PlElementList,
-  PlIcon24,
+  PlMaskIcon24,
   PlNumberField,
   PlSlideModal,
   PlTooltip,
   PlValueLabel,
+  useColumnValueOptions,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed, ref, watch, watchEffect } from "vue";
@@ -71,19 +73,35 @@ watchEffect(() => {
 // Subject is required only in intra-subject mode
 const subjectRequired = computed(() => app.model.data.calculationMode === "intra-subject");
 
-/**
- * Values of the temporal column, while they describe the temporal column picked now. The model
- * output follows the pick with a lag; until it catches up the timepoints are shown unchecked. A
- * picked timepoint missing from them stays picked and is shown as not available.
- */
-const timepointOptions = computed(() => {
-  const output = app.model.outputs.timepointOptions;
-  const temporalColumnRef = app.model.data.temporalColumnRef;
-  if (output === undefined || temporalColumnRef === undefined) return undefined;
-  return output.computedFor === temporalColumnRef ? output.options : undefined;
+/** The values of the temporal column picked now, as far as they are read. */
+const timepointValuesState = useColumnValueOptions({
+  source: () => app.model.outputs.timepointValues,
+  column: () => app.model.data.temporalColumnRef,
 });
 
-const timepointValues = computed(() => timepointOptions.value?.map((o) => o.value) ?? []);
+/**
+ * Values of the temporal column as options of the timepoints. `undefined` while they are read,
+ * so the timepoints are shown unchecked until then. A column whose values are gone or cannot be
+ * read offers none; a picked timepoint missing from them stays picked and is shown as not
+ * available.
+ */
+const timepointOptions = computed(() => {
+  const state = timepointValuesState.value;
+  if (state === undefined || state.type === "loading") return undefined;
+  return state.type === "read" ? state.options : [];
+});
+
+/** Why the values of the temporal column could not be read. */
+const timepointValuesError = computed(() => {
+  const state = timepointValuesState.value;
+  return state?.type === "failed" ? state.message : undefined;
+});
+
+/** Every value of the temporal column, once read. */
+const timepointValues = computed(() => {
+  const state = timepointValuesState.value;
+  return state?.type === "read" ? state.options.map((o) => o.value) : [];
+});
 
 /**
  * Whether the timepoint order differs in membership from the values of the temporal column: some
@@ -113,7 +131,7 @@ watch(
 );
 
 // An empty timepoint order takes every value of the temporal column, in natural order, once
-// they are known.
+// they are read.
 watchEffect(() => {
   const vals = timepointValues.value;
   if (vals.length > 0 && app.model.data.timepointOrder.length === 0) {
@@ -135,7 +153,7 @@ const isAdvancedOpen = ref(false);
       <PlBtnGhost @click.stop="showSettings">
         Settings
         <template #append>
-          <PlIcon24 name="settings" />
+          <PlMaskIcon24 name="settings" />
         </template>
       </PlBtnGhost>
     </template>
@@ -222,6 +240,9 @@ const isAdvancedOpen = ref(false);
             </template>
           </PlTooltip>
         </div>
+        <PlAlert v-if="timepointValuesError !== undefined" type="error">
+          {{ timepointValuesError }}
+        </PlAlert>
         <PlElementList v-model:items="app.model.data.timepointOrder">
           <template #item-title="{ item }">
             <PlValueLabel :value="item" :options="timepointOptions" />
@@ -230,7 +251,7 @@ const isAdvancedOpen = ref(false);
         <PlBtnGhost v-if="canResetTimepointOrder" @click="resetTimepointOrder">
           Reset to default
           <template #append>
-            <PlIcon24 name="reverse" />
+            <PlMaskIcon24 name="reverse" />
           </template>
         </PlBtnGhost>
       </PlAccordionSection>

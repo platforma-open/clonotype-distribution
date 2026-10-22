@@ -21,7 +21,7 @@ const OVERRIDDEN_ID = `{"__isOverridden":true,"source":${JSON.stringify(GLOBAL_I
 const ABUNDANCE_ID = '{"__isRef":true,"blockId":"b1","name":"pf/abundance"}';
 
 /** Timepoints picked from the temporal column, as column value ids. */
-const timepoint = (value: string | number) =>
+const timepoint = (value: string) =>
   createColumnValueId({ column: createGlobalPObjectId("b1", "pl7.app/metadata"), value });
 
 const COLUMN_FIELDS = ["subjectColumnRef", "groupingColumnRef", "temporalColumnRef"] as const;
@@ -90,7 +90,7 @@ describe("timepointOrder", () => {
   it.each([
     ["an empty array, as a block with no temporal column has", []],
     ["values of the temporal column", [timepoint("d0"), timepoint("d7"), timepoint("d28")]],
-    ["numeric values of the temporal column", [timepoint(0), timepoint(7)]],
+    ["numeric values of the temporal column, as text", [timepoint("0"), timepoint("7")]],
   ])("accepts %s", (_label, timepointOrder) => {
     expect(parse({ timepointOrder })).toEqual({ timepointOrder });
   });
