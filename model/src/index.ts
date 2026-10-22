@@ -81,20 +81,20 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   }))
 
   // Abundance column options
-  .output("abundanceOptions", (ctx) => getAbundanceOptions(ctx))
+  .output("abundanceOptions", () => getAbundanceOptions())
 
   // Metadata column options
   .output("metadataOptions", (ctx) => {
     const abundanceRef = ctx.data.abundanceRef;
     if (abundanceRef === undefined) return undefined;
-    return getMetadataOptions(ctx, abundanceRef);
+    return getMetadataOptions(abundanceRef);
   })
 
   // Dataset spec for detecting cluster vs clonotype
   .output("datasetSpec", (ctx) => {
     const abundanceRef = ctx.data.abundanceRef;
     if (abundanceRef === undefined) return undefined;
-    return findColumn(ctx, abundanceRef)?.getSpec();
+    return findColumn(abundanceRef)?.getSpec();
   })
 
   // Where the UI reads the values of the temporal column from: they are the timepoints to order
@@ -106,7 +106,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
 
   // Main output table
   .outputWithStatus("mainTable", (ctx) => {
-    const columns = getOutputColumns(ctx, ctx.outputs?.resolve("mainPf"));
+    const columns = getOutputColumns(ctx.outputs?.resolve("mainPf"));
     if (columns === undefined) return undefined;
     return createPlDataTableV3(ctx, {
       // The block's own result columns, all stored as they are, full-joined on the element.
@@ -123,7 +123,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   })
   .output("heatmapPCols", (ctx) => {
     if (ctx.data.groupingColumnRef === undefined) return undefined;
-    return getGraphColumns(ctx, resolveOptional(ctx, "heatmapPf"));
+    return getGraphColumns(resolveOptional(ctx, "heatmapPf"));
   })
 
   // Temporal line PFrame + raw columns for graph defaults (requires temporal variable)
@@ -133,7 +133,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   })
   .output("temporalLinePCols", (ctx) => {
     if (ctx.data.temporalColumnRef === undefined) return undefined;
-    return getGraphColumns(ctx, resolveOptional(ctx, "temporalLinePf"));
+    return getGraphColumns(resolveOptional(ctx, "temporalLinePf"));
   })
 
   // Prevalence histogram PFrame + raw columns for graph defaults (requires subject variable)
@@ -143,7 +143,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   })
   .output("prevalenceHistogramPCols", (ctx) => {
     if (ctx.data.subjectColumnRef === undefined) return undefined;
-    return getGraphColumns(ctx, resolveOptional(ctx, "prevalenceHistogramPf"));
+    return getGraphColumns(resolveOptional(ctx, "prevalenceHistogramPf"));
   })
 
   // R3: Per-subject detail PFrame (intra-subject mode with subject variable)
@@ -155,7 +155,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   .output("perSubjectPCols", (ctx) => {
     if (ctx.data.calculationMode !== "intra-subject" || ctx.data.subjectColumnRef === undefined)
       return undefined;
-    return getGraphColumns(ctx, resolveOptional(ctx, "perSubjectPf"));
+    return getGraphColumns(resolveOptional(ctx, "perSubjectPf"));
   })
 
   .output("isRunning", (ctx) => ctx.outputs?.getIsReadyOrError() === false)
@@ -199,17 +199,14 @@ function createGraphFrame(
   ctx: RenderCtxBase,
   accessor: TreeNodeAccessor | undefined,
 ): PFrameHandle | undefined {
-  const columns = getOutputColumns(ctx, accessor)?.getColumns();
+  const columns = getOutputColumns(accessor)?.getColumns();
   if (columns === undefined) return undefined;
   return createPFrameForGraphs(ctx, toPColumns(columns));
 }
 
 /** Ids and specs of the columns of one of this block's outputs, for graph defaults. */
-function getGraphColumns(
-  ctx: RenderCtxBase,
-  accessor: TreeNodeAccessor | undefined,
-): PColumnIdAndSpec[] | undefined {
-  const columns = getOutputColumns(ctx, accessor)?.getColumns();
+function getGraphColumns(accessor: TreeNodeAccessor | undefined): PColumnIdAndSpec[] | undefined {
+  const columns = getOutputColumns(accessor)?.getColumns();
   if (columns === undefined) return undefined;
   return toIdsAndSpecs(columns);
 }

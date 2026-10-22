@@ -1,9 +1,4 @@
-import type {
-  ColumnUniversalId,
-  PlRef,
-  RelaxedColumnSelector,
-  RenderCtxBase,
-} from "@platforma-sdk/model";
+import type { ColumnUniversalId, PlRef, RelaxedColumnSelector } from "@platforma-sdk/model";
 import { createGlobalPObjectId, deriveColumnOptions } from "@platforma-sdk/model";
 import type { ColumnPickerOption } from "./columns";
 import { exact, resultPool } from "./columns";
@@ -13,8 +8,8 @@ import { exact, resultPool } from "./columns";
  * with the column's own label (e.g. "Number of Reads"). Every option id is a result-pool leaf,
  * so it names the block that produced the column.
  */
-export function getAbundanceOptions(ctx: RenderCtxBase): ColumnPickerOption[] {
-  const columns = resultPool(ctx).filter({ include: PRIMARY_ABUNDANCE });
+export function getAbundanceOptions(): ColumnPickerOption[] {
+  const columns = resultPool().filter({ include: PRIMARY_ABUNDANCE });
   return deriveColumnOptions(columns, { includeNativeLabel: true }).map(({ id, label }) => ({
     value: id,
     label,
