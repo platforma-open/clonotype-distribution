@@ -1,33 +1,33 @@
+import { createColumnValueId, createGlobalPObjectId } from "@platforma-sdk/model";
 import { describe, expect, it } from "vitest";
 import { kind } from "./index";
 
 const parse = (params: unknown) => kind.parseInitializationParams(params);
 
 /**
- * The shape `resultPool.getCanonicalOptions` mints for `metadataOptions`, which is
- * what the settings panel writes into all three metadata column fields. Built from
- * the anchored selector the model asks for -- `axes: [{ anchor: "main", idx: 0 }]`,
- * `name: "pl7.app/metadata"` -- with the domain the pool fills in.
- *
- * `isColumnUniversalId` does not recognize this form even though the SDK types it
- * `SUniversalPColumnId`. A kind that refused it would refuse the ids the block itself
- * writes, so applying a template exported from this block would fail. Anything that
- * stops this test passing has broken the export/apply round trip.
+ * The anchored id `resultPool.getCanonicalOptions` minted for the metadata
+ * columns before they were stored by result-pool ids. It names no producing
+ * block, so the contract no longer accepts it.
  */
 const ANCHORED_ID =
   '{"axes":[{"anchor":"main","idx":0}],"domain":{"pl7.app/metadata/id":"tissue"},"name":"pl7.app/metadata"}';
 
-/** The other four serialized key forms `isColumnUniversalId` recognizes. */
+/** The serialized key forms `isColumnUniversalId` recognizes. */
 const GLOBAL_ID = '{"__isRef":true,"blockId":"b1","name":"pl7.app/metadata"}';
 const LOCAL_ID = '{"name":"pl7.app/metadata","resolvePath":["a","b"]}';
 const FILTERED_ID = `{"__isFiltered":true,"axisFilters":[[0,"lung"]],"source":${JSON.stringify(GLOBAL_ID)}}`;
 const OVERRIDDEN_ID = `{"__isOverridden":true,"source":${JSON.stringify(GLOBAL_ID)},"specOverrides":{"annotations":{"pl7.app/label":"Tissue"}}}`;
 
+const ABUNDANCE_ID = '{"__isRef":true,"blockId":"b1","name":"pf/abundance"}';
+
+/** Timepoints picked from the temporal column, as column value ids. */
+const timepoint = (value: string) =>
+  createColumnValueId({ column: createGlobalPObjectId("b1", "pl7.app/metadata"), value });
+
 const COLUMN_FIELDS = ["subjectColumnRef", "groupingColumnRef", "temporalColumnRef"] as const;
 
 describe.each(COLUMN_FIELDS)("%s", (field) => {
   it.each([
-    ["an anchored id, as getCanonicalOptions mints it", ANCHORED_ID],
     ["a global key id", GLOBAL_ID],
     ["a local key id", LOCAL_ID],
     ["a filtered key id", FILTERED_ID],
@@ -37,6 +37,7 @@ describe.each(COLUMN_FIELDS)("%s", (field) => {
   });
 
   it.each([
+    ["an anchored id, as getCanonicalOptions minted it", ANCHORED_ID],
     ["a string that is not JSON", "pl7.app/metadata"],
     ["malformed JSON", '{"name":"pl7.app/metadata"'],
     ["JSON that is not a column key", '{"foo":1}'],
@@ -46,23 +47,24 @@ describe.each(COLUMN_FIELDS)("%s", (field) => {
     ["the key form rather than its serialization", { name: "pl7.app/metadata", resolvePath: [] }],
   ])("rejects %s", (_label, id) => {
     expect(() => parse({ [field]: id })).toThrow(
-      `'${field}' must be a metadata column identifier.`,
+      `'${field}' must be a metadata column, written as a column id.`,
     );
   });
 });
 
 describe("abundanceRef", () => {
-  it("accepts a PlRef", () => {
-    const abundanceRef = { __isRef: true as const, blockId: "b1", name: "pf/abundance" };
-    expect(parse({ abundanceRef })).toEqual({ abundanceRef });
+  it("accepts a column id", () => {
+    expect(parse({ abundanceRef: ABUNDANCE_ID })).toEqual({ abundanceRef: ABUNDANCE_ID });
   });
 
   it.each([
-    ["a column id", ANCHORED_ID],
-    ["an object missing the marker", { blockId: "b1", name: "pf/abundance" }],
+    ["a PlRef", { __isRef: true, blockId: "b1", name: "pf/abundance" }],
+    ["an anchored id", ANCHORED_ID],
     ["a number", 42],
   ])("rejects %s", (_label, abundanceRef) => {
-    expect(() => parse({ abundanceRef })).toThrow("'abundanceRef' must be a reference");
+    expect(() => parse({ abundanceRef })).toThrow(
+      "'abundanceRef' must be an upstream column, written as a column id.",
+    );
   });
 });
 
@@ -87,15 +89,17 @@ describe("the enumerated fields", () => {
 describe("timepointOrder", () => {
   it.each([
     ["an empty array, as a block with no temporal column has", []],
-    ["the column's own values", ["d0", "d7", "d28"]],
+    ["values of the temporal column", [timepoint("d0"), timepoint("d7"), timepoint("d28")]],
+    ["numeric values of the temporal column, as text", [timepoint("0"), timepoint("7")]],
   ])("accepts %s", (_label, timepointOrder) => {
     expect(parse({ timepointOrder })).toEqual({ timepointOrder });
   });
 
   it.each([
-    ["a bare string", "d0"],
+    ["a bare column value id", timepoint("d0")],
+    ["plain values", ["d0", "d7"]],
     ["an array of numbers", [0, 7]],
-    ["an array with a hole", ["d0", null]],
+    ["an array with a hole", [timepoint("d0"), null]],
   ])("rejects %s", (_label, timepointOrder) => {
     expect(() => parse({ timepointOrder })).toThrow("'timepointOrder' must be an array");
   });
@@ -143,12 +147,12 @@ describe("the params envelope", () => {
 
   it("accepts a fully configured block", () => {
     const params = {
-      abundanceRef: { __isRef: true as const, blockId: "b1", name: "pf/abundance" },
+      abundanceRef: ABUNDANCE_ID,
       calculationMode: "intra-subject",
-      subjectColumnRef: ANCHORED_ID,
-      groupingColumnRef: ANCHORED_ID,
-      temporalColumnRef: ANCHORED_ID,
-      timepointOrder: ["d0", "d7"],
+      subjectColumnRef: GLOBAL_ID,
+      groupingColumnRef: GLOBAL_ID,
+      temporalColumnRef: GLOBAL_ID,
+      timepointOrder: [timepoint("d0"), timepoint("d7")],
       normalization: "clr",
       presenceThreshold: 0.01,
       minAbundanceThreshold: 5,

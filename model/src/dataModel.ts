@@ -1,13 +1,22 @@
-import { DataModelBuilder, createPlDataTableStateV2 } from "@platforma-sdk/model";
+import {
+  DataModelBuilder,
+  createPlDataTableStateV2,
+  isColumnUniversalId,
+  isColumnValueId,
+} from "@platforma-sdk/model";
 import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
-import type { BlockArgs, BlockData, LegacyUiState } from "./types";
+import { toColumnId } from "./abundance";
+import type { BlockArgsV1, BlockDataV1 } from "./stored_data";
+import type { BlockData, LegacyUiState } from "./types";
 
 export const blockDataModel = new DataModelBuilder({ kind })
-  .from<BlockData>("v1")
-  .upgradeLegacy<BlockArgs, LegacyUiState>(({ args, uiState }) => ({
+  .from<BlockDataV1>("v1")
+  .upgradeLegacy<BlockArgsV1, LegacyUiState>(({ args, uiState }) => ({
     ...args,
     ...uiState,
   }))
+  // Columns become result-pool ids and the timepoints column value ids
+  .migrate<BlockData>("v2", toColumnIds)
   .init(({ params }) => ({
     // Left empty on purpose. The default label is a join of the chosen columns'
     // human option labels, and those come from the result pool, which `init`
@@ -54,3 +63,24 @@ export const blockDataModel = new DataModelBuilder({ kind })
       },
     },
   }));
+
+// Internals
+
+/**
+ * Moves stored data to column ids. A ref to an upstream output becomes the result-pool id of
+ * that output, which names the same block and column. The subject, grouping and temporal
+ * columns were picked by ids anchored against the abundance column and the timepoints stored as
+ * plain values; neither names the block that produced the metadata, so they cannot become
+ * column ids and column value ids and are dropped, to be picked again.
+ */
+function toColumnIds(data: BlockDataV1): BlockData {
+  const column = (stored: string | undefined) => (isColumnUniversalId(stored) ? stored : undefined);
+  return {
+    ...data,
+    abundanceRef: data.abundanceRef === undefined ? undefined : toColumnId(data.abundanceRef),
+    subjectColumnRef: column(data.subjectColumnRef),
+    groupingColumnRef: column(data.groupingColumnRef),
+    temporalColumnRef: column(data.temporalColumnRef),
+    timepointOrder: data.timepointOrder.filter(isColumnValueId),
+  };
+}

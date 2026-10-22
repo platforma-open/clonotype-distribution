@@ -188,6 +188,9 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 9.39.4
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.1(@types/node@25.5.0)(vite@8.0.8(@types/node@25.5.0)(yaml@2.8.3))
 
   software:
     devDependencies:

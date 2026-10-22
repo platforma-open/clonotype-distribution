@@ -1,24 +1,24 @@
 <script setup lang="ts">
-import type { PObjectId, PlRef } from "@platforma-sdk/model";
-import { getSingleColumnData } from "@platforma-sdk/model";
 import {
   PlAccordion,
   PlAccordionSection,
   PlAgDataTableV2,
+  PlAlert,
   PlBlockPage,
   PlBtnGhost,
   PlBtnGroup,
   PlDropdown,
-  PlDropdownRef,
   PlElementList,
   PlMaskIcon24,
   PlNumberField,
   PlSlideModal,
   PlTooltip,
+  PlValueLabel,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed, ref, watch, watchEffect } from "vue";
 import { useApp } from "../app";
+import { useTimepointValues } from "../timepoint_values";
 
 const app = useApp();
 
@@ -26,10 +26,6 @@ const settingsAreShown = ref(app.model.outputs.datasetSpec === undefined);
 const showSettings = () => {
   settingsAreShown.value = true;
 };
-
-function setInput(inputRef?: PlRef) {
-  app.model.data.abundanceRef = inputRef;
-}
 
 const calculationModeOptions = [
   { label: "Population-Level", value: "population" },
@@ -50,8 +46,7 @@ watchEffect(() => {
   const metaOpts = app.model.outputs.metadataOptions ?? [];
   const findLabel = (ref?: string) => {
     if (!ref) return undefined;
-    const opt = metaOpts.find((o: { value?: string; label?: string }) => o.value === ref);
-    return opt?.label;
+    return metaOpts.find((o) => o.value === ref)?.label;
   };
 
   const parts: string[] = [];
@@ -78,35 +73,45 @@ watchEffect(() => {
 // Subject is required only in intra-subject mode
 const subjectRequired = computed(() => app.model.data.calculationMode === "intra-subject");
 
-// Fetch unique timepoint values from the temporal column via pframe driver
-const timepointValues = ref<string[]>([]);
+/** The values of the temporal column picked now, as far as they are read. */
+const timepointValuesState = useTimepointValues({
+  source: () => app.model.outputs.timepointValues,
+  column: () => app.model.data.temporalColumnRef,
+});
 
-watch(
-  () => ({
-    pframe: app.model.outputs.temporalColumnPframe,
-    colId: app.model.outputs.temporalColumnId,
-  }),
-  async ({ pframe, colId }) => {
-    if (!pframe || !colId) {
-      timepointValues.value = [];
-      return;
-    }
-    try {
-      const colData = await getSingleColumnData(pframe, colId as PObjectId);
-      const unique = [
-        ...new Set(colData.data.filter((v): v is string | number => v != null).map(String)),
-      ].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      timepointValues.value = unique;
-    } catch {
-      timepointValues.value = [];
-    }
-  },
-  { immediate: true },
-);
+/**
+ * Values of the temporal column as options of the timepoints. `undefined` while they are read,
+ * so the timepoints are shown unchecked until then. A column whose values are gone or cannot be
+ * read offers none; a picked timepoint missing from them stays picked and is shown as not
+ * available.
+ */
+const timepointOptions = computed(() => {
+  const state = timepointValuesState.value;
+  if (state === undefined || state.type === "loading") return undefined;
+  return state.type === "read" ? state.options : [];
+});
 
-const availableTimepointsToAdd = computed(() => {
-  const current = new Set(app.model.data.timepointOrder);
-  return timepointValues.value.filter((v: string) => !current.has(v));
+/** Why the values of the temporal column could not be read. */
+const timepointValuesError = computed(() => {
+  const state = timepointValuesState.value;
+  return state?.type === "failed" ? state.message : undefined;
+});
+
+/** Every value of the temporal column, once read. */
+const timepointValues = computed(() => {
+  const state = timepointValuesState.value;
+  return state?.type === "read" ? state.options.map((o) => o.value) : [];
+});
+
+/**
+ * Whether the timepoint order differs in membership from the values of the temporal column: some
+ * value is left out, or some picked timepoint is no longer among them.
+ */
+const canResetTimepointOrder = computed(() => {
+  const values = new Set(timepointValues.value);
+  const picked = new Set(app.model.data.timepointOrder);
+  if (values.size === 0) return false;
+  return [...values].some((v) => !picked.has(v)) || [...picked].some((v) => !values.has(v));
 });
 
 const resetTimepointOrder = () => {
@@ -115,23 +120,22 @@ const resetTimepointOrder = () => {
   }
 };
 
-// Auto-populate timepoint order when temporal column changes
-const temporalSyncCol = ref<string | undefined>(app.model.data.temporalColumnRef);
+// The timepoints are values of the temporal column, so picking another column (or none)
+// invalidates them outright. Only a change of the column clears them: timepoints persisted with
+// the block survive a remount of the page.
+watch(
+  () => app.model.data.temporalColumnRef,
+  () => {
+    app.model.data.timepointOrder = [];
+  },
+);
+
+// An empty timepoint order takes every value of the temporal column, in natural order, once
+// they are read.
 watchEffect(() => {
-  const col = app.model.data.temporalColumnRef;
   const vals = timepointValues.value;
-
-  if (vals && vals.length > 0) {
-    const current = app.model.data.timepointOrder;
-    const valSet = new Set(vals);
-    const hasInvalidItems = current.some((v: string) => !valSet.has(v));
-
-    if (col !== temporalSyncCol.value || current.length === 0) {
-      app.model.data.timepointOrder = [...vals];
-      temporalSyncCol.value = col;
-    } else if (hasInvalidItems) {
-      app.model.data.timepointOrder = current.filter((v: string) => valSet.has(v));
-    }
+  if (vals.length > 0 && app.model.data.timepointOrder.length === 0) {
+    app.model.data.timepointOrder = [...vals];
   }
 });
 
@@ -166,13 +170,12 @@ const isAdvancedOpen = ref(false);
   <PlSlideModal v-model="settingsAreShown">
     <template #title>Settings</template>
 
-    <PlDropdownRef
+    <PlDropdown
       v-model="app.model.data.abundanceRef"
       :options="app.model.outputs.abundanceOptions"
       label="Select abundance"
       clearable
       required
-      @update:model-value="setInput"
     />
 
     <PlBtnGroup
@@ -237,12 +240,15 @@ const isAdvancedOpen = ref(false);
             </template>
           </PlTooltip>
         </div>
+        <PlAlert v-if="timepointValuesError !== undefined" type="error">
+          {{ timepointValuesError }}
+        </PlAlert>
         <PlElementList v-model:items="app.model.data.timepointOrder">
           <template #item-title="{ item }">
-            {{ item }}
+            <PlValueLabel :value="item" :options="timepointOptions" />
           </template>
         </PlElementList>
-        <PlBtnGhost v-if="availableTimepointsToAdd.length > 0" @click="resetTimepointOrder">
+        <PlBtnGhost v-if="canResetTimepointOrder" @click="resetTimepointOrder">
           Reset to default
           <template #append>
             <PlMaskIcon24 name="reverse" />
