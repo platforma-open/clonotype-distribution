@@ -32,13 +32,12 @@ export type MetadataColumnFrame =
  * options.
  */
 export function getMetadataOptions(
-  ctx: RenderCtxBase,
   abundanceRef: ColumnUniversalId,
 ): ColumnPickerOption[] | undefined {
-  const sampleAxis = findColumn(ctx, abundanceRef)?.getSpec().axesSpec[0];
-  if (sampleAxis === undefined) return resultPool(ctx).isFinal() ? [] : undefined;
+  const sampleAxis = findColumn(abundanceRef)?.getSpec().axesSpec[0];
+  if (sampleAxis === undefined) return resultPool().isFinal() ? [] : undefined;
 
-  const columns = resultPool(ctx).filter({
+  const columns = resultPool().filter({
     include: {
       name: [exact(METADATA_COLUMN_NAME)],
       axes: [axisSelector(sampleAxis)],
@@ -53,7 +52,7 @@ export function getMetadataColumnFrame(
   ctx: RenderCtxBase,
   column: ColumnUniversalId,
 ): MetadataColumnFrame {
-  const status = ColumnRecipe.getStatus(column, { ctx: ctx.ctx });
+  const status = ColumnRecipe.getStatus(column);
   if (status !== "present") return { type: status, column };
   const frame = ctx.createPFrame([column]);
   if (frame === undefined) return { type: "resolving", column };
