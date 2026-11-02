@@ -8,6 +8,7 @@
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 assets := import("@platforma-sdk/workflow-tengo:assets")
 render := import("@platforma-sdk/workflow-tengo:render")
+json := import("json")
 
 processTpl := assets.importTemplate(":process")
 
@@ -25,6 +26,10 @@ wf.body(func(args) {
 	if args.subjectColumnRef != undefined {
 		bundleBuilder.addSingle(args.subjectColumnRef)
 	}
+	// Optional subset column picked alongside the abundance (PlDatasetSelector)
+	if !is_undefined(args.inputFilter) {
+		bundleBuilder.addRef(json.decode(args.inputFilter))
+	}
 
 	columns := bundleBuilder.build()
 
@@ -41,7 +46,7 @@ wf.body(func(args) {
 		blockLabel = "Clonotype Distribution"
 	}
 
-	processResult := render.createEphemeral(processTpl, {
+	processInputs := {
 		columns: columns,
 		blockId: wf.blockId().getDataAsJson(),
 		blockLabel: blockLabel,
@@ -56,7 +61,12 @@ wf.body(func(args) {
 		minAbundanceThreshold: args.minAbundanceThreshold,
 		minSubjectCount: args.minSubjectCount,
 		topN: args.topN
-	})
+	}
+	// Only for a subset run, so a full-data run keeps exactly its previous inputs
+	if !is_undefined(args.inputFilter) {
+		processInputs.subset = args.inputFilter
+	}
+	processResult := render.createEphemeral(processTpl, processInputs)
 
 	outputs := {
 		mainPf: processResult.output("mainPf")

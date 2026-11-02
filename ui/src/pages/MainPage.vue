@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import type { PObjectId, PlRef } from "@platforma-sdk/model";
-import { getSingleColumnData } from "@platforma-sdk/model";
+import type { DatasetSelection, PObjectId } from "@platforma-sdk/model";
+import {
+  createDatasetSelection,
+  createPrimaryRef,
+  getSingleColumnData,
+} from "@platforma-sdk/model";
 import {
   PlAccordion,
   PlAccordionSection,
@@ -8,8 +12,8 @@ import {
   PlBlockPage,
   PlBtnGhost,
   PlBtnGroup,
+  PlDatasetSelector,
   PlDropdown,
-  PlDropdownRef,
   PlElementList,
   PlMaskIcon24,
   PlNumberField,
@@ -27,9 +31,17 @@ const showSettings = () => {
   settingsAreShown.value = true;
 };
 
-function setInput(inputRef?: PlRef) {
-  app.model.data.abundanceRef = inputRef;
-}
+const abundanceSelection = computed<DatasetSelection | undefined>({
+  get: () => {
+    const { abundanceRef, filterRef } = app.model.data;
+    if (abundanceRef === undefined) return undefined;
+    return createDatasetSelection(createPrimaryRef(abundanceRef, filterRef));
+  },
+  set: (selection) => {
+    app.model.data.abundanceRef = selection?.primary.column;
+    app.model.data.filterRef = selection?.primary.filter;
+  },
+});
 
 const calculationModeOptions = [
   { label: "Population-Level", value: "population" },
@@ -166,13 +178,12 @@ const isAdvancedOpen = ref(false);
   <PlSlideModal v-model="settingsAreShown">
     <template #title>Settings</template>
 
-    <PlDropdownRef
-      v-model="app.model.data.abundanceRef"
+    <PlDatasetSelector
+      v-model="abundanceSelection"
       :options="app.model.outputs.abundanceOptions"
       label="Select abundance"
       clearable
       required
-      @update:model-value="setInput"
     />
 
     <PlBtnGroup

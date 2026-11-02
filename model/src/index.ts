@@ -1,5 +1,18 @@
-import type { InferOutputsType, PFrameHandle } from "@platforma-sdk/model";
-import { BlockModelV3, createPFrameForGraphs, createPlDataTableV2 } from "@platforma-sdk/model";
+import type {
+  DatasetOption,
+  InferOutputsType,
+  PFrameHandle,
+  PObjectSpec,
+} from "@platforma-sdk/model";
+import {
+  BlockModelV3,
+  buildDatasetOptions,
+  createGlobalPObjectId,
+  createPFrameForGraphs,
+  createPlDataTableV2,
+  isPColumnSpec,
+  plRefsEqual,
+} from "@platforma-sdk/model";
 import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 import { blockDataModel } from "./dataModel";
 import type { BlockArgs } from "./types";
@@ -19,6 +32,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
       heatmapState: _heatmapState,
       temporalLineState: _temporalLineState,
       prevalenceHistogramState: _prevalenceHistogramState,
+      filterRef,
       ...args
     } = data;
     const {
@@ -36,7 +50,12 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
       throw new Error("At least grouping or temporal variable required");
     if (calculationMode === "intra-subject" && subjectColumnRef === undefined)
       throw new Error("Subject required in intra-subject mode");
-    return args;
+    return {
+      ...args,
+      ...(filterRef !== undefined && {
+        inputFilter: createGlobalPObjectId(filterRef.blockId, filterRef.name),
+      }),
+    };
   })
 
   // Inverse of the kind's init-params contract: every field a user sets by
@@ -46,6 +65,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   // templated.
   .templateParams((data) => ({
     abundanceRef: data.abundanceRef,
+    filterRef: data.filterRef,
     calculationMode: data.calculationMode,
     subjectColumnRef: data.subjectColumnRef,
     groupingColumnRef: data.groupingColumnRef,
@@ -59,22 +79,38 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
     customBlockLabel: data.customBlockLabel,
   }))
 
-  // Abundance column options
-  .output("abundanceOptions", (ctx) =>
-    ctx.resultPool.getOptions(
-      [
-        {
-          axes: [{ name: "pl7.app/sampleId" }, {}],
-          annotations: {
-            "pl7.app/isAbundance": "true",
-            "pl7.app/abundance/normalized": "false",
-            "pl7.app/abundance/isPrimary": "true",
-          },
-        },
-      ],
-      { label: { includeNativeLabel: true } },
-    ),
-  )
+  // Primary raw abundances, each with its subset columns (e.g. Repertoire Labeling labels) as filters.
+  .output("abundanceOptions", (ctx): DatasetOption[] => {
+    const isPrimaryAbundance = (spec: PObjectSpec) =>
+      isPColumnSpec(spec) &&
+      spec.axesSpec.length === 2 &&
+      spec.axesSpec[0].name === "pl7.app/sampleId" &&
+      spec.annotations?.["pl7.app/isAbundance"] === "true" &&
+      spec.annotations?.["pl7.app/abundance/normalized"] === "false" &&
+      spec.annotations?.["pl7.app/abundance/isPrimary"] === "true";
+
+    // Labels as before, with the column's own label (e.g. "Number of Reads"): buildDatasetOptions
+    // derives them without it and takes no label options for the datasets.
+    const labeled = ctx.resultPool.getOptions(isPrimaryAbundance, {
+      label: { includeNativeLabel: true },
+    });
+
+    const options =
+      buildDatasetOptions(ctx, {
+        primary: isPrimaryAbundance,
+        // Only subsets keyed by the element axis alone: a sample subset would drop whole samples.
+        filter: (spec) =>
+          isPColumnSpec(spec) &&
+          spec.axesSpec.length === 1 &&
+          spec.axesSpec[0].name !== "pl7.app/sampleId",
+        requireEnrichments: false,
+      }) ?? [];
+
+    return options.map((option) => {
+      const label = labeled.find((o) => plRefsEqual(o.ref, option.primary.ref, true))?.label;
+      return label === undefined ? option : { ...option, primary: { ...option.primary, label } };
+    });
+  })
 
   // Metadata column options
   .output("metadataOptions", (ctx) => {
