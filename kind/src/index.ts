@@ -16,10 +16,10 @@ export type Normalization = "relative-frequency" | "clr";
 
 /**
  * This block's init-params contract — everything a user sets by hand: the
- * abundance column to profile, the calculation mode, the three metadata
- * columns the metrics are computed over, the chronological order of the
- * timepoints, the normalization, the four numeric thresholds, and the subtitle
- * they type.
+ * abundance column to profile (and an optional subset of it), the calculation
+ * mode, the three metadata columns the metrics are computed over, the
+ * chronological order of the timepoints, the normalization, the four numeric
+ * thresholds, and the subtitle they type.
  *
  * `defaultBlockLabel` is absent: a `watchEffect` in `ui/src/pages/MainPage.vue`
  * derives it from the chosen columns' option labels, which only exist once the
@@ -33,6 +33,8 @@ export type Normalization = "relative-frequency" | "clr";
  */
 export type BlockParams = {
   abundanceRef?: PlRef;
+  /** A subset column (`pl7.app/isSubset`) the abundance is restricted to before the analysis. */
+  filterRef?: PlRef;
   calculationMode?: CalculationMode;
   subjectColumnRef?: SUniversalPColumnId;
   groupingColumnRef?: SUniversalPColumnId;
@@ -66,6 +68,7 @@ function parseInitializationParams(value: unknown): BlockParams {
 
   const {
     abundanceRef,
+    filterRef,
     calculationMode,
     subjectColumnRef,
     groupingColumnRef,
@@ -82,6 +85,11 @@ function parseInitializationParams(value: unknown): BlockParams {
   if (abundanceRef !== undefined && !isPlRef(abundanceRef)) {
     throw new Error(
       "'abundanceRef' must be a reference to an upstream column, written as { block, name }.",
+    );
+  }
+  if (filterRef !== undefined && !isPlRef(filterRef)) {
+    throw new Error(
+      "'filterRef' must be a reference to an upstream column, written as { block, name }.",
     );
   }
   if (calculationMode !== undefined && !CALCULATION_MODES.includes(calculationMode as string)) {
@@ -129,6 +137,7 @@ function parseInitializationParams(value: unknown): BlockParams {
 
   return {
     abundanceRef,
+    filterRef,
     calculationMode: calculationMode as CalculationMode | undefined,
     subjectColumnRef: subjectColumnRef as SUniversalPColumnId | undefined,
     groupingColumnRef: groupingColumnRef as SUniversalPColumnId | undefined,

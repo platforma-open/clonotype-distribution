@@ -15,6 +15,8 @@ export type BlockArgs = {
   defaultBlockLabel: string;
   customBlockLabel: string;
   abundanceRef?: PlRef;
+  /** Canonical id of the subset column; set only when a filter is picked. */
+  inputFilter?: string;
   calculationMode: CalculationMode;
   groupingColumnRef?: SUniversalPColumnId;
   temporalColumnRef?: SUniversalPColumnId;
@@ -28,7 +30,9 @@ export type BlockArgs = {
 };
 
 /** Unified V3 data — the args above plus the four view states the workflow never sees. */
-export type BlockData = BlockArgs & {
+export type BlockData = Omit<BlockArgs, "inputFilter"> & {
+  /** Subset column picked with the abundance in PlDatasetSelector (e.g. a Repertoire Labeling label). */
+  filterRef?: PlRef;
   tableState: PlDataTableStateV2;
   heatmapState: GraphMakerState;
   temporalLineState: GraphMakerState;

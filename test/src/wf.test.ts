@@ -184,7 +184,7 @@ blockTest(
     expect(abundanceOpts.length, "Should have abundance options").toBeGreaterThan(0);
     console.log(
       "Abundance options:",
-      abundanceOpts.map((o: any) => o.label),
+      abundanceOpts.map((o: any) => o.primary.label),
     );
 
     // Step 4b: Set abundanceRef first so metadata options can resolve
@@ -193,7 +193,7 @@ blockTest(
       value: {
         defaultBlockLabel: "",
         customBlockLabel: "",
-        abundanceRef: abundanceOpts[0].ref,
+        abundanceRef: abundanceOpts[0].primary.ref,
         calculationMode: "population",
         timepointOrder: [],
         normalization: "relative-frequency",
@@ -245,7 +245,7 @@ blockTest(
     const blockData: BlockData = {
       defaultBlockLabel: "",
       customBlockLabel: "",
-      abundanceRef: abundanceOpts[0].ref,
+      abundanceRef: abundanceOpts[0].primary.ref,
       calculationMode: "population",
       groupingColumnRef: tissueOption.value,
       temporalColumnRef: timepointOption?.value,

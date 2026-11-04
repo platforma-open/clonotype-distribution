@@ -18,6 +18,7 @@ export const blockDataModel = new DataModelBuilder({ kind })
     defaultBlockLabel: "",
     customBlockLabel: params?.customBlockLabel ?? "",
     abundanceRef: params?.abundanceRef,
+    filterRef: params?.filterRef,
     calculationMode: params?.calculationMode ?? ("population" as const),
     groupingColumnRef: params?.groupingColumnRef,
     temporalColumnRef: params?.temporalColumnRef,

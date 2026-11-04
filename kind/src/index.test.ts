@@ -51,18 +51,18 @@ describe.each(COLUMN_FIELDS)("%s", (field) => {
   });
 });
 
-describe("abundanceRef", () => {
+describe.each(["abundanceRef", "filterRef"])("%s", (field) => {
   it("accepts a PlRef", () => {
-    const abundanceRef = { __isRef: true as const, blockId: "b1", name: "pf/abundance" };
-    expect(parse({ abundanceRef })).toEqual({ abundanceRef });
+    const ref = { __isRef: true as const, blockId: "b1", name: "pf/column" };
+    expect(parse({ [field]: ref })).toEqual({ [field]: ref });
   });
 
   it.each([
     ["a column id", ANCHORED_ID],
     ["an object missing the marker", { blockId: "b1", name: "pf/abundance" }],
     ["a number", 42],
-  ])("rejects %s", (_label, abundanceRef) => {
-    expect(() => parse({ abundanceRef })).toThrow("'abundanceRef' must be a reference");
+  ])("rejects %s", (_label, ref) => {
+    expect(() => parse({ [field]: ref })).toThrow(`'${field}' must be a reference`);
   });
 });
 
@@ -144,6 +144,7 @@ describe("the params envelope", () => {
   it("accepts a fully configured block", () => {
     const params = {
       abundanceRef: { __isRef: true as const, blockId: "b1", name: "pf/abundance" },
+      filterRef: { __isRef: true as const, blockId: "b2", name: "labels.igg" },
       calculationMode: "intra-subject",
       subjectColumnRef: ANCHORED_ID,
       groupingColumnRef: ANCHORED_ID,

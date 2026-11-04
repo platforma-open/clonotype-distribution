@@ -76,20 +76,45 @@ self.body(func(inputs) {
 		temporalDiscreteValues = string(json.encode(inputs.timepointOrder))
 	}
 
-	// Build input CSV with hardcoded column names
-	csvBuilder := pframes.csvFileBuilder()
-	csvBuilder.add(columns.getColumn(inputs.abundanceRef), {header: "abundance"})
+	// Optional subset: only its elements enter the analysis. The trace roots in the filter
+	// so downstream labels name it.
+	filterColumn := undefined
+	traceSpec := abundanceSpec
+	if !is_undefined(inputs.subset) {
+		f := columns.getColumn(json.decode(inputs.subset))
+		filterColumn = { spec: f.spec, data: f.data }
+		traceSpec = f.spec
+	}
+
+	// Build input CSV with hardcoded column names. With a subset, the abundance is the
+	// filtered primary and the sample metadata fills its rows only.
+	csvBuilder := undefined
+	addColumn := undefined
+	abundanceColumn := columns.getColumn(inputs.abundanceRef)
+	if is_undefined(filterColumn) {
+		csvBuilder = pframes.csvFileBuilder()
+		csvBuilder.add(abundanceColumn, {header: "abundance"})
+		addColumn = csvBuilder.add
+	} else {
+		csvBuilder = pframes.tableBuilder("csv").setColumnJoin("left")
+		csvBuilder.addPrimary("main", {
+			__isPrimaryRef: "v1",
+			column: abundanceColumn,
+			filter: filterColumn
+		}, {header: "abundance"})
+		addColumn = csvBuilder.addColumn
+	}
 	csvBuilder.setAxisHeader(abundanceSpec.axesSpec[0].name, "sampleId")
 	csvBuilder.setAxisHeader(abundanceSpec.axesSpec[1].name, "elementId")
 
 	if hasSubject {
-		csvBuilder.add(columns.getColumn(inputs.subjectColumnRef), {header: "subject"})
+		addColumn(columns.getColumn(inputs.subjectColumnRef), {header: "subject"})
 	}
 	if hasGrouping {
-		csvBuilder.add(columns.getColumn(inputs.groupingColumnRef), {header: "grouping"})
+		addColumn(columns.getColumn(inputs.groupingColumnRef), {header: "grouping"})
 	}
 	if hasTimepoint {
-		csvBuilder.add(columns.getColumn(inputs.temporalColumnRef), {header: "timepoint"})
+		addColumn(columns.getColumn(inputs.temporalColumnRef), {header: "timepoint"})
 	}
 
 	csvBuilder.mem("8GiB")
@@ -163,7 +188,7 @@ self.body(func(inputs) {
 	// Mode/normalization are deliberately not appended here: mode already rides in via
 	// the UI-derived defaultBlockLabel, a custom label must stay verbatim, and any
 	// distinguishing setting belongs in that UI label, not the trace stamp (§5).
-	trace := pSpec.makeTrace(abundanceSpec, {
+	trace := pSpec.makeTrace(traceSpec, {
 		type: "milaboratories.spatiotemporal-analysis",
 		importance: 30,
 		label: inputs.blockLabel
@@ -400,6 +425,13 @@ self.body(func(inputs) {
 				}
 			}
 		})
+	}
+
+	// A subset run stamps its exports: they cover only the subset's elements
+	if !is_undefined(filterColumn) {
+		for c in mainImportColumns {
+			c.spec.domain["pl7.app/inputSubset"] = inputs.subset
+		}
 	}
 
 	mainImportParams := {
