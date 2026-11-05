@@ -20,11 +20,12 @@ import {
   PlSlideModal,
   PlTooltip,
   PlValueLabel,
+  usePlColumnValueSettings,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed, ref, watch, watchEffect } from "vue";
 import { useApp } from "../app";
-import { useTimepointValues } from "../timepoint_values";
+import { useTimepointOptions } from "../timepoints";
 
 const app = useApp();
 
@@ -90,10 +91,12 @@ watchEffect(() => {
 const subjectRequired = computed(() => app.model.data.calculationMode === "intra-subject");
 
 /** The values of the temporal column picked now, as far as they are read. */
-const timepointValuesState = useTimepointValues({
-  source: () => app.model.outputs.timepointValues,
-  column: () => app.model.data.temporalColumnRef,
-});
+const timepointValuesState = useTimepointOptions(
+  usePlColumnValueSettings({
+    source: () => app.model.outputs.timepointOptions,
+    valueColumn: () => app.model.data.temporalColumnRef,
+  }),
+);
 
 /**
  * Values of the temporal column as options of the timepoints. `undefined` while they are read,
@@ -103,20 +106,20 @@ const timepointValuesState = useTimepointValues({
  */
 const timepointOptions = computed(() => {
   const state = timepointValuesState.value;
-  if (state === undefined || state.type === "loading") return undefined;
+  if (state.type === "none" || state.type === "loading") return undefined;
   return state.type === "read" ? state.options : [];
 });
 
 /** Why the values of the temporal column could not be read. */
 const timepointValuesError = computed(() => {
   const state = timepointValuesState.value;
-  return state?.type === "failed" ? state.message : undefined;
+  return state.type === "failed" ? state.message : undefined;
 });
 
 /** Every value of the temporal column, once read. */
 const timepointValues = computed(() => {
   const state = timepointValuesState.value;
-  return state?.type === "read" ? state.options.map((o) => o.value) : [];
+  return state.type === "read" ? state.options.map((o) => o.value) : [];
 });
 
 /**

@@ -6,19 +6,23 @@ import type {
   ArgsIssue,
   TreeNodeAccessor,
 } from "@platforma-sdk/model";
-import { BlockModelV3, createPFrameForGraphs, createPlDataTableV3 } from "@platforma-sdk/model";
+import {
+  BlockModelV3,
+  createColumnValueOptions,
+  createPFrameForGraphs,
+  createPlDataTableV3,
+} from "@platforma-sdk/model";
 import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 import { getAbundanceOptions } from "./abundance";
 import { findColumn, getOutputColumns, toIdsAndSpecs, toPColumns } from "./columns";
 import { blockDataModel } from "./dataModel";
-import { getMetadataColumnFrame, getMetadataOptions } from "./metadata";
+import { getMetadataOptions } from "./metadata";
 import type { BlockArgs } from "./types";
 
 export type { AbundancePick } from "./abundance";
 export { fromAbundanceSelection, toAbundanceSelection } from "./abundance";
 export { blockDataModel } from "./dataModel";
 export type { ColumnPickerOption } from "./columns";
-export type { MetadataColumnFrame } from "./metadata";
 export type { BlockArgs, BlockData, LegacyUiState } from "./types";
 export type * from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 
@@ -102,10 +106,10 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   })
 
   // Where the UI reads the values of the temporal column from: they are the timepoints to order
-  .output("timepointValues", (ctx) => {
+  .output("timepointOptions", (ctx) => {
     const temporalColumnRef = ctx.data.temporalColumnRef;
     if (temporalColumnRef === undefined) return undefined;
-    return getMetadataColumnFrame(ctx, temporalColumnRef);
+    return createColumnValueOptions({ valueColumn: temporalColumnRef });
   })
 
   // Main output table

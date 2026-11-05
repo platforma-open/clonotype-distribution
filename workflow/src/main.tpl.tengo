@@ -14,10 +14,12 @@ columnValue := import("@platforma-sdk/workflow-tengo:workflow.column-value")
 processTpl := assets.importTemplate(":process")
 
 wf.body(func(args) {
-	// Build PColumn bundle (deferred — resolves asynchronously). Every column arrives as a
-	// result-pool column id.
+	// Columns arrive as result-pool column ids: the canonical JSON of the ref to the upstream output
+	abundanceRef := json.decode(args.abundanceRef)
+
+	// Build PColumn bundle (deferred — resolves asynchronously)
 	bundleBuilder := wf.createPBundleBuilder()
-	bundleBuilder.addSingle(args.abundanceRef)
+	bundleBuilder.addAnchor("main", abundanceRef)
 
 	if args.groupingColumnRef != undefined {
 		bundleBuilder.addSingle(args.groupingColumnRef)
@@ -60,7 +62,7 @@ wf.body(func(args) {
 		columns: columns,
 		blockId: wf.blockId().getDataAsJson(),
 		blockLabel: blockLabel,
-		abundanceRef: args.abundanceRef,
+		abundanceRef: abundanceRef,
 		groupingColumnRef: args.groupingColumnRef,
 		temporalColumnRef: args.temporalColumnRef,
 		subjectColumnRef: args.subjectColumnRef,
