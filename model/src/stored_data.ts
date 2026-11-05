@@ -22,5 +22,8 @@ export type BlockArgsV1 = {
   topN: number;
 };
 
-/** Data as stored at `v1`: the args above plus the four view states. */
-export type BlockDataV1 = BlockArgsV1 & LegacyUiState;
+/**
+ * Data as stored at `v1`: the args above, the subset the abundance is narrowed to as a ref to an
+ * upstream output, and the four view states.
+ */
+export type BlockDataV1 = BlockArgsV1 & LegacyUiState & { filterRef?: PlRef };

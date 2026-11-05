@@ -43,6 +43,12 @@ describe("v2 migration", () => {
     expect(data.abundanceRef).toBe(createGlobalPObjectId("mixcr", "abundance"));
   });
 
+  test("a subset picked with the abundance becomes its result-pool id", () => {
+    const filterRef = { __isRef: true, blockId: "labeling", name: "lead" };
+    const migrated = blockDataModel.migrate({ version: "v1", data: { ...storedAtV1, filterRef } });
+    expect(migrated.data.filterRef).toBe(createGlobalPObjectId("labeling", "lead"));
+  });
+
   test("anchored subject, grouping and temporal columns and plain timepoints are reset", () => {
     expect(data.subjectColumnRef).toBeUndefined();
     expect(data.groupingColumnRef).toBeUndefined();

@@ -14,6 +14,8 @@ import { blockDataModel } from "./dataModel";
 import { getMetadataColumnFrame, getMetadataOptions } from "./metadata";
 import type { BlockArgs } from "./types";
 
+export type { AbundancePick } from "./abundance";
+export { fromAbundanceSelection, toAbundanceSelection } from "./abundance";
 export { blockDataModel } from "./dataModel";
 export type { ColumnPickerOption } from "./columns";
 export type { MetadataColumnFrame } from "./metadata";
@@ -83,7 +85,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   }))
 
   // Abundance column options
-  .output("abundanceOptions", () => getAbundanceOptions())
+  .output("abundanceOptions", (ctx) => getAbundanceOptions(ctx))
 
   // Metadata column options
   .output("metadataOptions", (ctx) => {

@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import {
+  fromAbundanceSelection,
+  toAbundanceSelection,
+} from "@platforma-open/milaboratories.spatiotemporal-analysis.model";
+import type { DatasetSelection } from "@platforma-sdk/model";
+import {
   PlAccordion,
   PlAccordionSection,
   PlAgDataTableV2,
@@ -22,6 +27,16 @@ import { useApp } from "../app";
 import { useTimepointValues } from "../timepoint_values";
 
 const app = useApp();
+
+// The selector picks the abundance, or the abundance narrowed by one of its subset columns.
+const abundanceSelection = computed<DatasetSelection | undefined>({
+  get: () => toAbundanceSelection(app.model.data),
+  set: (selection) => {
+    const { abundanceRef, filterRef } = fromAbundanceSelection(selection);
+    app.model.data.abundanceRef = abundanceRef;
+    app.model.data.filterRef = filterRef;
+  },
+});
 
 const settingsAreShown = ref(app.model.outputs.datasetSpec === undefined);
 const showSettings = () => {
@@ -171,8 +186,8 @@ const isAdvancedOpen = ref(false);
   <PlSlideModal v-model="settingsAreShown">
     <template #title>Settings</template>
 
-    <PlDropdown
-      v-model="app.model.data.abundanceRef"
+    <PlDatasetSelector
+      v-model="abundanceSelection"
       :options="app.model.outputs.abundanceOptions"
       label="Select abundance"
       clearable

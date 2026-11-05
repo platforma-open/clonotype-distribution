@@ -79,6 +79,7 @@ function toColumnIds(data: BlockDataV1): BlockData {
   return {
     ...data,
     abundanceRef: data.abundanceRef === undefined ? undefined : toColumnId(data.abundanceRef),
+    filterRef: data.filterRef === undefined ? undefined : toColumnId(data.filterRef),
     subjectColumnRef: column(data.subjectColumnRef),
     groupingColumnRef: column(data.groupingColumnRef),
     temporalColumnRef: column(data.temporalColumnRef),

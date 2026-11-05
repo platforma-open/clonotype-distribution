@@ -11,7 +11,12 @@ import {
 } from "@platforma-open/milaboratories.mixcr-clonotyping-2.model";
 import { blockSpec as samplesAndDataBlockSpec } from "@platforma-open/milaboratories.samples-and-data";
 import type { BlockArgs as SamplesAndDataBlockArgs } from "@platforma-open/milaboratories.samples-and-data.model";
-import { createColumnValueIds, createPlDataTableStateV2, wrapOutputs } from "@platforma-sdk/model";
+import {
+  createColumnValueIds,
+  createGlobalPObjectId,
+  createPlDataTableStateV2,
+  wrapOutputs,
+} from "@platforma-sdk/model";
 import { awaitStableState, blockTest } from "@platforma-sdk/test";
 import { SpatiotemporalAnalysisBlockPointer as compartmentAnalysisBlockSpec } from "this-block";
 
@@ -182,6 +187,8 @@ blockTest(
     expect(compartmentOutputs1.abundanceOptions?.ok).toBe(true);
     const abundanceOpts = compartmentOutputs1.abundanceOptions?.value ?? [];
     expect(abundanceOpts.length, "Should have abundance options").toBeGreaterThan(0);
+    const { blockId, name } = abundanceOpts[0].primary.ref;
+    const abundanceRef = createGlobalPObjectId(blockId, name);
     console.log(
       "Abundance options:",
       abundanceOpts.map((o: any) => o.primary.label),
@@ -193,7 +200,7 @@ blockTest(
       value: {
         defaultBlockLabel: "",
         customBlockLabel: "",
-        abundanceRef: abundanceOpts[0].value,
+        abundanceRef,
         calculationMode: "population",
         timepointOrder: [],
         normalization: "relative-frequency",
@@ -245,7 +252,7 @@ blockTest(
     const blockData: BlockData = {
       defaultBlockLabel: "",
       customBlockLabel: "",
-      abundanceRef: abundanceOpts[0].value,
+      abundanceRef,
       calculationMode: "population",
       groupingColumnRef: tissueOption.value,
       temporalColumnRef: timepointOption?.value,
