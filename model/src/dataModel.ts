@@ -1,7 +1,7 @@
 import {
   DataModelBuilder,
   createPlDataTableStateV2,
-  isColumnUniversalId,
+  isGlobalPObjectId,
   isColumnValueId,
 } from "@platforma-sdk/model";
 import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
@@ -75,7 +75,7 @@ export const blockDataModel = new DataModelBuilder({ kind })
  * column ids and column value ids and are dropped, to be picked again.
  */
 function toColumnIds(data: BlockDataV1): BlockData {
-  const column = (stored: string | undefined) => (isColumnUniversalId(stored) ? stored : undefined);
+  const column = (stored: string | undefined) => (isGlobalPObjectId(stored) ? stored : undefined);
   return {
     ...data,
     abundanceRef: data.abundanceRef === undefined ? undefined : toColumnId(data.abundanceRef),

@@ -1,5 +1,6 @@
 import { createColumnValueId, createGlobalPObjectId } from "@platforma-sdk/model";
 import { describe, expect, test } from "vitest";
+import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 import { blockDataModel } from "./dataModel";
 
 const abundance = { __isRef: true, blockId: "mixcr", name: "abundance" };
@@ -93,6 +94,23 @@ describe("v2 migration", () => {
     const { abundanceRef: _, ...withoutAbundance } = storedAtV1;
     const migrated = blockDataModel.migrate({ version: "v1", data: withoutAbundance }).data;
     expect(migrated.abundanceRef).toBeUndefined();
+  });
+
+  test("the migrated picks are what the kind accepts", () => {
+    const filterRef = { __isRef: true, blockId: "labeling", name: "lead" };
+    const migrated = blockDataModel.migrate({ version: "v1", data: { ...storedAtV1, filterRef } });
+    const { abundanceRef, subjectColumnRef, groupingColumnRef, temporalColumnRef, timepointOrder } =
+      migrated.data;
+    expect(() =>
+      kind.parseInitializationParams({
+        abundanceRef,
+        filterRef: migrated.data.filterRef,
+        subjectColumnRef,
+        groupingColumnRef,
+        temporalColumnRef,
+        timepointOrder,
+      }),
+    ).not.toThrow();
   });
 
   test("a migrated block is left as is when it is loaded again", () => {

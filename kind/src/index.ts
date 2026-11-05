@@ -1,6 +1,6 @@
 import { assertParamsObject, defineBlockKind } from "@platforma-sdk/block-kind";
 import type { ColumnUniversalId, ColumnValueId } from "@platforma-sdk/model";
-import { isColumnUniversalId, isColumnValueId } from "@platforma-sdk/model";
+import { isColumnValueId, isGlobalPObjectId } from "@platforma-sdk/model";
 import { name, version } from "../package.json" with { type: "json" };
 
 /** Whether distribution metrics are pooled across the cohort or computed within each subject. */
@@ -20,10 +20,11 @@ export type Normalization = "relative-frequency" | "clr";
  * derives it from the chosen columns' option labels, which only exist once the
  * result pool has resolved them.
  *
- * The abundance column and the three metadata columns are result-pool column
- * ids, each naming the block that produced the column. The timepoints are
- * column value ids of the temporal column: each names the column it was picked
- * from, and through it the block that produced the value.
+ * The columns (`abundanceRef`, `filterRef` and the three metadata columns) are
+ * result-pool column ids, each naming the block that produced the column. The
+ * timepoints (`timepointOrder`) are column value ids of the temporal column:
+ * each names the column it was picked from, and through it the block that
+ * produced the value.
  *
  * Every field is optional. A half-configured block is ordinary state the UI
  * reaches -- the abundance column alone leaves every metric column unset, and
@@ -59,6 +60,8 @@ export const kind = defineBlockKind<BlockParams>({
 
 // Internals
 
+const OUTPUT_ID = "the result-pool id of another block's output";
+
 const CALCULATION_MODES: readonly string[] = ["population", "intra-subject"];
 const NORMALIZATIONS: readonly string[] = ["relative-frequency", "clr"];
 
@@ -82,28 +85,28 @@ function parseInitializationParams(value: unknown): BlockParams {
     customBlockLabel,
   } = value;
 
-  if (abundanceRef !== undefined && !isColumnUniversalId(abundanceRef)) {
-    throw new Error("'abundanceRef' must be an upstream column, written as a column id.");
+  if (abundanceRef !== undefined && !isGlobalPObjectId(abundanceRef)) {
+    throw new Error(`'abundanceRef' must be an upstream column, written as ${OUTPUT_ID}.`);
   }
-  if (filterRef !== undefined && !isColumnUniversalId(filterRef)) {
-    throw new Error("'filterRef' must be an upstream column, written as a column id.");
+  if (filterRef !== undefined && !isGlobalPObjectId(filterRef)) {
+    throw new Error(`'filterRef' must be an upstream subset column, written as ${OUTPUT_ID}.`);
   }
   if (calculationMode !== undefined && !CALCULATION_MODES.includes(calculationMode as string)) {
     throw new Error(`'calculationMode' must be one of: ${CALCULATION_MODES.join(", ")}.`);
   }
-  if (subjectColumnRef !== undefined && !isColumnUniversalId(subjectColumnRef)) {
-    throw new Error("'subjectColumnRef' must be a metadata column, written as a column id.");
+  if (subjectColumnRef !== undefined && !isGlobalPObjectId(subjectColumnRef)) {
+    throw new Error(`'subjectColumnRef' must be a metadata column, written as ${OUTPUT_ID}.`);
   }
-  if (groupingColumnRef !== undefined && !isColumnUniversalId(groupingColumnRef)) {
-    throw new Error("'groupingColumnRef' must be a metadata column, written as a column id.");
+  if (groupingColumnRef !== undefined && !isGlobalPObjectId(groupingColumnRef)) {
+    throw new Error(`'groupingColumnRef' must be a metadata column, written as ${OUTPUT_ID}.`);
   }
-  if (temporalColumnRef !== undefined && !isColumnUniversalId(temporalColumnRef)) {
-    throw new Error("'temporalColumnRef' must be a metadata column, written as a column id.");
+  if (temporalColumnRef !== undefined && !isGlobalPObjectId(temporalColumnRef)) {
+    throw new Error(`'temporalColumnRef' must be a metadata column, written as ${OUTPUT_ID}.`);
   }
   // The values of the temporal column in chronological order. Any value the
   // user's metadata holds is legal -- only the column value id form is checked.
-  // A value the column no longer holds stays picked and is shown as not
-  // available.
+  // A timepoint the column no longer holds stays in the order and is shown as
+  // not available.
   if (timepointOrder !== undefined) {
     if (!Array.isArray(timepointOrder) || !timepointOrder.every(isColumnValueId)) {
       throw new Error(

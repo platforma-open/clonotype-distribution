@@ -15,7 +15,7 @@ import {
   PlDatasetSelector,
   PlDropdown,
   PlElementList,
-  PlMaskIcon24,
+  PlIcon24,
   PlNumberField,
   PlSlideModal,
   PlTooltip,
@@ -169,7 +169,7 @@ const isAdvancedOpen = ref(false);
       <PlBtnGhost @click.stop="showSettings">
         Settings
         <template #append>
-          <PlMaskIcon24 name="settings" />
+          <PlIcon24 name="settings" />
         </template>
       </PlBtnGhost>
     </template>
@@ -267,7 +267,7 @@ const isAdvancedOpen = ref(false);
         <PlBtnGhost v-if="canResetTimepointOrder" @click="resetTimepointOrder">
           Reset to default
           <template #append>
-            <PlMaskIcon24 name="reverse" />
+            <PlIcon24 name="reverse" />
           </template>
         </PlBtnGhost>
       </PlAccordionSection>
