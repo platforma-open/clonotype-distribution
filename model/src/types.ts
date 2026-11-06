@@ -1,5 +1,5 @@
 import type { GraphMakerState } from "@milaboratories/graph-maker";
-import type { PlDataTableStateV2, PlRef, SUniversalPColumnId } from "@platforma-sdk/model";
+import type { ColumnUniversalId, ColumnValueId, PlDataTableStateV2 } from "@platforma-sdk/model";
 // The calculation-mode and normalization vocabularies live in the kind: its
 // init-params contract names them and a kind cannot import from the model.
 import type {
@@ -10,18 +10,20 @@ import type {
 /**
  * Workflow-facing args — every user-committed analysis decision. Both label
  * fields are here because the workflow reads them for the provenance trace.
+ * The abundance and metadata columns are result-pool column ids; the timepoints
+ * are column value ids of the temporal column.
  */
 export type BlockArgs = {
   defaultBlockLabel: string;
   customBlockLabel: string;
-  abundanceRef?: PlRef;
+  abundanceRef?: ColumnUniversalId;
   /** Canonical id of the subset column; set only when a filter is picked. */
   inputFilter?: string;
   calculationMode: CalculationMode;
-  groupingColumnRef?: SUniversalPColumnId;
-  temporalColumnRef?: SUniversalPColumnId;
-  timepointOrder: string[];
-  subjectColumnRef?: SUniversalPColumnId;
+  groupingColumnRef?: ColumnUniversalId;
+  temporalColumnRef?: ColumnUniversalId;
+  timepointOrder: ColumnValueId[];
+  subjectColumnRef?: ColumnUniversalId;
   normalization: Normalization;
   presenceThreshold: number;
   minAbundanceThreshold: number;
@@ -32,7 +34,7 @@ export type BlockArgs = {
 /** Unified V3 data — the args above plus the four view states the workflow never sees. */
 export type BlockData = Omit<BlockArgs, "inputFilter"> & {
   /** Subset column picked with the abundance in PlDatasetSelector (e.g. a Repertoire Labeling label). */
-  filterRef?: PlRef;
+  filterRef?: ColumnUniversalId;
   tableState: PlDataTableStateV2;
   heatmapState: GraphMakerState;
   temporalLineState: GraphMakerState;

@@ -1,11 +1,6 @@
 import { assertParamsObject, defineBlockKind } from "@platforma-sdk/block-kind";
-import type { PlRef, SUniversalPColumnId } from "@platforma-sdk/model";
-import {
-  isAnchoredPColumnId,
-  isColumnUniversalId,
-  isPlRef,
-  parseJsonSafely,
-} from "@platforma-sdk/model";
+import type { ColumnUniversalId, ColumnValueId } from "@platforma-sdk/model";
+import { isColumnValueId, isGlobalPObjectId } from "@platforma-sdk/model";
 import { name, version } from "../package.json" with { type: "json" };
 
 /** Whether distribution metrics are pooled across the cohort or computed within each subject. */
@@ -25,6 +20,12 @@ export type Normalization = "relative-frequency" | "clr";
  * derives it from the chosen columns' option labels, which only exist once the
  * result pool has resolved them.
  *
+ * The columns (`abundanceRef`, `filterRef` and the three metadata columns) are
+ * result-pool column ids, each naming the block that produced the column. The
+ * timepoints (`timepointOrder`) are column value ids of the temporal column:
+ * each names the column it was picked from, and through it the block that
+ * produced the value.
+ *
  * Every field is optional. A half-configured block is ordinary state the UI
  * reaches -- the abundance column alone leaves every metric column unset, and
  * the block stays that way until the user picks one -- and the projection hands
@@ -32,14 +33,14 @@ export type Normalization = "relative-frequency" | "clr";
  * round trip.
  */
 export type BlockParams = {
-  abundanceRef?: PlRef;
+  abundanceRef?: ColumnUniversalId;
   /** A subset column (`pl7.app/isSubset`) the abundance is restricted to before the analysis. */
-  filterRef?: PlRef;
+  filterRef?: ColumnUniversalId;
   calculationMode?: CalculationMode;
-  subjectColumnRef?: SUniversalPColumnId;
-  groupingColumnRef?: SUniversalPColumnId;
-  temporalColumnRef?: SUniversalPColumnId;
-  timepointOrder?: string[];
+  subjectColumnRef?: ColumnUniversalId;
+  groupingColumnRef?: ColumnUniversalId;
+  temporalColumnRef?: ColumnUniversalId;
+  timepointOrder?: ColumnValueId[];
   normalization?: Normalization;
   presenceThreshold?: number;
   minAbundanceThreshold?: number;
@@ -58,6 +59,8 @@ export const kind = defineBlockKind<BlockParams>({
 });
 
 // Internals
+
+const OUTPUT_ID = "the result-pool id of another block's output";
 
 const CALCULATION_MODES: readonly string[] = ["population", "intra-subject"];
 const NORMALIZATIONS: readonly string[] = ["relative-frequency", "clr"];
@@ -82,34 +85,33 @@ function parseInitializationParams(value: unknown): BlockParams {
     customBlockLabel,
   } = value;
 
-  if (abundanceRef !== undefined && !isPlRef(abundanceRef)) {
-    throw new Error(
-      "'abundanceRef' must be a reference to an upstream column, written as { block, name }.",
-    );
+  if (abundanceRef !== undefined && !isGlobalPObjectId(abundanceRef)) {
+    throw new Error(`'abundanceRef' must be an upstream column, written as ${OUTPUT_ID}.`);
   }
-  if (filterRef !== undefined && !isPlRef(filterRef)) {
-    throw new Error(
-      "'filterRef' must be a reference to an upstream column, written as { block, name }.",
-    );
+  if (filterRef !== undefined && !isGlobalPObjectId(filterRef)) {
+    throw new Error(`'filterRef' must be an upstream subset column, written as ${OUTPUT_ID}.`);
   }
   if (calculationMode !== undefined && !CALCULATION_MODES.includes(calculationMode as string)) {
     throw new Error(`'calculationMode' must be one of: ${CALCULATION_MODES.join(", ")}.`);
   }
-  if (subjectColumnRef !== undefined && !isColumnId(subjectColumnRef)) {
-    throw new Error("'subjectColumnRef' must be a metadata column identifier.");
+  if (subjectColumnRef !== undefined && !isGlobalPObjectId(subjectColumnRef)) {
+    throw new Error(`'subjectColumnRef' must be a metadata column, written as ${OUTPUT_ID}.`);
   }
-  if (groupingColumnRef !== undefined && !isColumnId(groupingColumnRef)) {
-    throw new Error("'groupingColumnRef' must be a metadata column identifier.");
+  if (groupingColumnRef !== undefined && !isGlobalPObjectId(groupingColumnRef)) {
+    throw new Error(`'groupingColumnRef' must be a metadata column, written as ${OUTPUT_ID}.`);
   }
-  if (temporalColumnRef !== undefined && !isColumnId(temporalColumnRef)) {
-    throw new Error("'temporalColumnRef' must be a metadata column identifier.");
+  if (temporalColumnRef !== undefined && !isGlobalPObjectId(temporalColumnRef)) {
+    throw new Error(`'temporalColumnRef' must be a metadata column, written as ${OUTPUT_ID}.`);
   }
-  // The values of the temporal column in chronological order. They are the
-  // column's own cell values, so anything the user's metadata holds is legal --
-  // only the array-of-strings envelope is checked.
+  // The values of the temporal column in chronological order. Any value the
+  // user's metadata holds is legal -- only the column value id form is checked.
+  // A timepoint the column no longer holds stays in the order and is shown as
+  // not available.
   if (timepointOrder !== undefined) {
-    if (!Array.isArray(timepointOrder) || !timepointOrder.every((v) => typeof v === "string")) {
-      throw new Error("'timepointOrder' must be an array of timepoint values.");
+    if (!Array.isArray(timepointOrder) || !timepointOrder.every(isColumnValueId)) {
+      throw new Error(
+        "'timepointOrder' must be an array of timepoint values, written as column value ids.",
+      );
     }
   }
   if (normalization !== undefined && !NORMALIZATIONS.includes(normalization as string)) {
@@ -139,10 +141,10 @@ function parseInitializationParams(value: unknown): BlockParams {
     abundanceRef,
     filterRef,
     calculationMode: calculationMode as CalculationMode | undefined,
-    subjectColumnRef: subjectColumnRef as SUniversalPColumnId | undefined,
-    groupingColumnRef: groupingColumnRef as SUniversalPColumnId | undefined,
-    temporalColumnRef: temporalColumnRef as SUniversalPColumnId | undefined,
-    timepointOrder: timepointOrder as string[] | undefined,
+    subjectColumnRef,
+    groupingColumnRef,
+    temporalColumnRef,
+    timepointOrder,
     normalization: normalization as Normalization | undefined,
     presenceThreshold,
     minAbundanceThreshold,
@@ -150,19 +152,6 @@ function parseInitializationParams(value: unknown): BlockParams {
     topN,
     customBlockLabel,
   };
-}
-
-/**
- * A column identifier as this block stores it: a canonically serialized JSON key.
- * `isColumnUniversalId` covers the key forms the SDK's id encoding uses, but every
- * column id here comes from `resultPool.getCanonicalOptions`, which mints an
- * *anchored* key -- a shape none of those recognizes even though the SDK types it
- * `SUniversalPColumnId`. Both forms are accepted, or the kind would refuse the ids
- * the block itself writes into a template.
- */
-function isColumnId(value: unknown): value is SUniversalPColumnId {
-  if (typeof value !== "string") return false;
-  return isColumnUniversalId(value) || isAnchoredPColumnId(parseJsonSafely(value));
 }
 
 function isFraction(value: unknown): value is number {
