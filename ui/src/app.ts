@@ -29,19 +29,21 @@ export const useApp = sdkPlugin.useApp;
 type AppModel = ReturnType<typeof useApp>["model"];
 
 // The subtitle names the chosen grouping, temporal and subject columns as the result pool labels
-// them: "" when none is chosen, undefined while a chosen column's option is not loaded yet.
+// them: undefined while the options are loading; a chosen column the loaded options no longer
+// list is left out.
 function syncSubtitleLabel(model: AppModel) {
   const subtitleLabel = computed<string | undefined>(() => {
-    const metadataOptions = model.outputs.metadataOptions;
     const { groupingColumnRef, temporalColumnRef, subjectColumnRef } = model.data;
-    const labels: string[] = [];
-    for (const ref of [groupingColumnRef, temporalColumnRef, subjectColumnRef]) {
-      if (ref === undefined) continue;
-      const label = metadataOptions?.find((o) => o.value === ref)?.label;
-      if (label === undefined) return undefined;
-      labels.push(label);
-    }
-    return labels.filter(Boolean).join(", ");
+    const refs = [groupingColumnRef, temporalColumnRef, subjectColumnRef].filter(
+      (ref) => ref !== undefined,
+    );
+    if (refs.length === 0) return "";
+    const metadataOptions = model.outputs.metadataOptions;
+    if (metadataOptions === undefined) return undefined;
+    return refs
+      .map((ref) => metadataOptions.find((o) => o.value === ref)?.label)
+      .filter(Boolean)
+      .join(", ");
   });
 
   watch(
