@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  defaultSubtitle,
   fromAbundanceSelection,
   toAbundanceSelection,
 } from "@platforma-open/milaboratories.spatiotemporal-analysis.model";
@@ -56,35 +57,6 @@ const normalizationOptions = [
 
 const tableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.mainTable,
-});
-
-// Auto-build default subtitle from selected settings
-watchEffect(() => {
-  const metaOpts = app.model.outputs.metadataOptions ?? [];
-  const findLabel = (ref?: string) => {
-    if (!ref) return undefined;
-    return metaOpts.find((o) => o.value === ref)?.label;
-  };
-
-  const parts: string[] = [];
-
-  const mode = app.model.data.calculationMode;
-  parts.push(mode === "intra-subject" ? "Intra-Subject" : "Population");
-
-  const groupLabel = findLabel(app.model.data.groupingColumnRef);
-  if (groupLabel) parts.push(groupLabel);
-
-  const temporalLabel = findLabel(app.model.data.temporalColumnRef);
-  if (temporalLabel) parts.push(temporalLabel);
-
-  const subjectLabel = findLabel(app.model.data.subjectColumnRef);
-  if (subjectLabel) parts.push(subjectLabel);
-
-  // CLR is the non-default normalization; surface it so blocks that differ only
-  // in normalization stay distinguishable downstream.
-  if (app.model.data.normalization === "clr") parts.push("CLR");
-
-  app.model.data.defaultBlockLabel = parts.join(", ");
 });
 
 // Subject is required only in intra-subject mode
@@ -165,7 +137,7 @@ const isAdvancedOpen = ref(false);
 <template>
   <PlBlockPage
     v-model:subtitle="app.model.data.customBlockLabel"
-    :subtitle-placeholder="app.model.data.defaultBlockLabel"
+    :subtitle-placeholder="defaultSubtitle(app.model.data)"
     title="Clonotype Distribution"
   >
     <template #append>

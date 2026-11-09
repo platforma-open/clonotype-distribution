@@ -10,6 +10,7 @@ pframes := import("@platforma-sdk/workflow-tengo:pframes")
 pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
 slices := import("@platforma-sdk/workflow-tengo:slices")
 json := import("json")
+traceLabel := import(":trace-label")
 
 analysisSw := assets.importSoftware("@platforma-open/milaboratories.spatiotemporal-analysis.software:compartment-analysis")
 
@@ -181,17 +182,11 @@ self.body(func(inputs) {
 
 	elementAxisSpec := abundanceSpec.axesSpec[1]
 
-	// Per-instance label, resolved in main.tpl.tengo as
-	// customBlockLabel || defaultBlockLabel || "Clonotype Distribution". Stamping it
-	// into every output column gives each instance a distinct trace entry, so
-	// downstream label derivation can add a suffix instead of two identical options.
-	// Mode/normalization are deliberately not appended here: mode already rides in via
-	// the UI-derived defaultBlockLabel, a custom label must stay verbatim, and any
-	// distinguishing setting belongs in that UI label, not the trace stamp (§5).
+	blockLabel := traceLabel.build(inputs, columns)
 	trace := pSpec.makeTrace(traceSpec, {
 		type: "milaboratories.spatiotemporal-analysis",
 		importance: 30,
-		label: inputs.blockLabel
+		label: blockLabel
 	})
 
 	// Wrap a splitDataAndSpec xsv.importFile result into a traced PFrame.

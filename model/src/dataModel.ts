@@ -6,7 +6,7 @@ import {
 } from "@platforma-sdk/model";
 import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
 import { toColumnId } from "./abundance";
-import type { BlockArgsV1, BlockDataV1 } from "./stored_data";
+import type { BlockArgsV1, BlockDataV1, BlockDataV2 } from "./stored_data";
 import type { BlockData, LegacyUiState } from "./types";
 
 export const blockDataModel = new DataModelBuilder({ kind })
@@ -16,16 +16,17 @@ export const blockDataModel = new DataModelBuilder({ kind })
     ...uiState,
   }))
   // Columns become result-pool ids and the timepoints column value ids
-  .migrate<BlockData>("v2", toColumnIds)
+  .migrate<BlockDataV2>("v2", toColumnIds)
+  // The old label mixed the chosen columns' result-pool labels with settings; the settings part
+  // is recomputed from data, and the column part returns once the block is opened.
+  .migrate<BlockData>("v3", ({ defaultBlockLabel: _, ...rest }) => ({
+    ...rest,
+    subtitleLabel: "",
+  }))
   .init(({ params }) => ({
-    // Left empty on purpose. The default label is a join of the chosen columns'
-    // human option labels, and those come from the result pool, which `init`
-    // cannot reach -- so a block created from a template traces the static
-    // "Clonotype Distribution" fallback until the settings panel derives the
-    // real label. Anything computable here (the mode, the CLR marker) would be
-    // a prefix of that label, not the label, so it would still be replaced.
-    defaultBlockLabel: "",
     customBlockLabel: params?.customBlockLabel ?? "",
+    // The columns' result-pool labels are out of reach here; the UI fills them in once it opens.
+    subtitleLabel: "",
     abundanceRef: params?.abundanceRef,
     filterRef: params?.filterRef,
     calculationMode: params?.calculationMode ?? ("population" as const),
@@ -74,7 +75,7 @@ export const blockDataModel = new DataModelBuilder({ kind })
  * plain values; neither names the block that produced the metadata, so they cannot become
  * column ids and column value ids and are dropped, to be picked again.
  */
-function toColumnIds(data: BlockDataV1): BlockData {
+function toColumnIds(data: BlockDataV1): BlockDataV2 {
   const column = (stored: string | undefined) => (isGlobalPObjectId(stored) ? stored : undefined);
   return {
     ...data,

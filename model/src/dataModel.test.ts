@@ -57,9 +57,8 @@ describe("v2 migration", () => {
     expect(data.timepointOrder).toEqual([]);
   });
 
-  test("the analysis settings, labels and view states are kept", () => {
+  test("the analysis settings, custom label and view states are kept", () => {
     expect(data).toMatchObject({
-      defaultBlockLabel: "Donor, Timepoint",
       customBlockLabel: "",
       calculationMode: "intra-subject",
       normalization: "clr",
@@ -114,6 +113,33 @@ describe("v2 migration", () => {
   });
 
   test("a migrated block is left as is when it is loaded again", () => {
-    expect(blockDataModel.migrate({ version: "v2", data }).data).toEqual(data);
+    expect(blockDataModel.migrate({ version: "v3", data }).data).toEqual(data);
+  });
+});
+
+describe("v3 migration", () => {
+  const storedAtV2 = {
+    ...storedAtV1,
+    defaultBlockLabel: "Intra-Subject, Tissue, Day, Donor, CLR",
+    customBlockLabel: "My distribution",
+    abundanceRef: createGlobalPObjectId("mixcr", "abundance"),
+    subjectColumnRef: undefined,
+    groupingColumnRef: undefined,
+    temporalColumnRef: undefined,
+    timepointOrder: [],
+  };
+  const { data } = blockDataModel.migrate({ version: "v2", data: storedAtV2 });
+
+  test("the derived label is dropped and the subtitle text starts empty", () => {
+    expect(data).not.toHaveProperty("defaultBlockLabel");
+    expect(data.subtitleLabel).toBe("");
+  });
+
+  test("the custom label and the settings are kept", () => {
+    expect(data).toMatchObject({
+      customBlockLabel: "My distribution",
+      calculationMode: "intra-subject",
+      normalization: "clr",
+    });
   });
 });

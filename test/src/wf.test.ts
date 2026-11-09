@@ -198,7 +198,7 @@ blockTest(
     await project.mutateBlockStorage(compartmentBlockId, {
       operation: "update-block-data",
       value: {
-        defaultBlockLabel: "",
+        subtitleLabel: "",
         customBlockLabel: "",
         abundanceRef,
         calculationMode: "population",
@@ -250,7 +250,7 @@ blockTest(
 
     // Step 5: Configure Compartment Analysis with full data
     const blockData: BlockData = {
-      defaultBlockLabel: "",
+      subtitleLabel: "",
       customBlockLabel: "",
       abundanceRef,
       calculationMode: "population",

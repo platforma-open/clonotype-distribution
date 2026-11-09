@@ -1,0 +1,59 @@
+test := import("@platforma-sdk/workflow-tengo:test")
+traceLabel := import(":trace-label")
+
+specs := {
+	grouping: {annotations: {"pl7.app/label": "Tissue"}},
+	temporal: {annotations: {"pl7.app/label": "Timepoint"}},
+	subject: {annotations: {"pl7.app/label": "Donor"}},
+	unlabelled: {annotations: {}},
+	bare: {}
+}
+
+columns := {
+	getSpec: func(ref) {
+		return specs[ref]
+	}
+}
+
+inputs := func(overrides) {
+	res := {
+		customBlockLabel: "",
+		groupingColumnRef: undefined,
+		temporalColumnRef: undefined,
+		subjectColumnRef: undefined,
+		paramsLabel: ""
+	}
+	for k, v in overrides {
+		res[k] = v
+	}
+	return res
+}
+
+Test_custom_label_is_kept_verbatim := func() {
+	test.isEqual("My run", traceLabel.build(inputs({
+		customBlockLabel: "My run",
+		groupingColumnRef: "grouping",
+		paramsLabel: "Normalized"
+	}), columns), "custom label wins")
+}
+
+Test_default_lists_column_labels_in_order_then_settings := func() {
+	test.isEqual("Clonotype Distribution (Tissue, Timepoint, Donor, Normalized)", traceLabel.build(inputs({
+		groupingColumnRef: "grouping",
+		temporalColumnRef: "temporal",
+		subjectColumnRef: "subject",
+		paramsLabel: "Normalized"
+	}), columns), "grouping, temporal, subject, then settings")
+}
+
+Test_unset_and_unlabelled_columns_are_skipped := func() {
+	test.isEqual("Clonotype Distribution (Donor)", traceLabel.build(inputs({
+		groupingColumnRef: "unlabelled",
+		temporalColumnRef: "bare",
+		subjectColumnRef: "subject"
+	}), columns), "only labelled columns appear")
+}
+
+Test_nothing_chosen_gives_the_block_name := func() {
+	test.isEqual("Clonotype Distribution", traceLabel.build(inputs({}), columns), "bare block name")
+}

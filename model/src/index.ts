@@ -16,12 +16,14 @@ import { kind } from "@platforma-open/milaboratories.spatiotemporal-analysis.kin
 import { getAbundanceOptions } from "./abundance";
 import { findColumn, getOutputColumns, toIdsAndSpecs, toPColumns } from "./columns";
 import { blockDataModel } from "./dataModel";
+import { defaultSubtitle, labelFromParams } from "./label";
 import { getMetadataOptions } from "./metadata";
 import type { BlockArgs } from "./types";
 
 export type { AbundancePick } from "./abundance";
 export { fromAbundanceSelection, toAbundanceSelection } from "./abundance";
 export { blockDataModel } from "./dataModel";
+export { defaultSubtitle, labelFromParams } from "./label";
 export type { ColumnPickerOption } from "./columns";
 export type { BlockArgs, BlockData, LegacyUiState } from "./types";
 export type * from "@platforma-open/milaboratories.spatiotemporal-analysis.kind";
@@ -29,16 +31,21 @@ export type * from "@platforma-open/milaboratories.spatiotemporal-analysis.kind"
 export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind })
 
   .args<BlockArgs>((data): BlockArgs => {
-    // Strip UI state; everything else maps 1:1 to BlockArgs.
+    // Strip UI state and the subtitle text; everything else maps 1:1 to BlockArgs.
     const {
       tableState: _tableState,
       heatmapState: _heatmapState,
       temporalLineState: _temporalLineState,
       prevalenceHistogramState: _prevalenceHistogramState,
+      subtitleLabel: _subtitleLabel,
       filterRef,
       ...args
     } = data;
-    return { ...args, ...(filterRef !== undefined && { inputFilter: filterRef }) };
+    return {
+      ...args,
+      paramsLabel: labelFromParams(data),
+      ...(filterRef !== undefined && { inputFilter: filterRef }),
+    };
   })
 
   // The run gate: the block runs only once the abundance column, an axis to compare
@@ -68,10 +75,8 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   })
 
   // Inverse of the kind's init-params contract: every field a user sets by
-  // hand. `defaultBlockLabel` is derived by a watchEffect in
-  // ui/src/pages/MainPage.vue from the chosen columns' option labels, so it is
-  // projected into args (the workflow reads it for the trace) but never
-  // templated.
+  // hand. `subtitleLabel` is display text the UI copies from the result pool,
+  // so it is never templated.
   .templateParams((data) => ({
     abundanceRef: data.abundanceRef,
     filterRef: data.filterRef,
@@ -170,7 +175,7 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
 
   .title(() => "Clonotype Distribution")
 
-  .subtitle((ctx) => ctx.data.customBlockLabel || ctx.data.defaultBlockLabel)
+  .subtitle((ctx) => ctx.data.customBlockLabel || defaultSubtitle(ctx.data))
 
   .sections((ctx) => {
     const sections: { type: "link"; href: `/${string}`; label: string }[] = [
