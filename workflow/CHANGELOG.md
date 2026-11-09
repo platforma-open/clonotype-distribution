@@ -1,5 +1,17 @@
 # @platforma-open/milaboratories.spatiotemporal-analysis.workflow
 
+## 1.0.1
+
+### Patch Changes
+
+- b6fe3c6: Compute the block label without the UI
+
+  The trace label is now built by the workflow from the native labels of the chosen grouping,
+  temporal and subject columns plus the calculation mode and normalization, so opening the block
+  no longer changes its arguments and a block that was never opened still gets a meaningful label.
+  The subtitle shows the result-pool labels of the chosen columns. Existing blocks show as stale
+  once after the update.
+
 ## 1.0.0
 
 ### Major Changes
