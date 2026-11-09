@@ -21,7 +21,7 @@ const subject = createGlobalPObjectId("samples", "metadata.donor");
 const timepoint = (value: string) => createColumnValueId({ column: temporal, value });
 
 const configured = {
-  defaultBlockLabel: "Tissue",
+  subtitleLabel: "Tissue",
   customBlockLabel: "",
   abundanceRef: abundance,
   calculationMode: "population",
@@ -46,6 +46,12 @@ describe("args issues", () => {
       issues: [],
     });
     expect(result).not.toHaveProperty("value.tableState");
+  });
+
+  test("args carry the settings label but not the subtitle text", () => {
+    const result = deriveArgs({ ...configured, normalization: "clr" });
+    expect(result).toMatchObject({ value: { paramsLabel: "Population, CLR" } });
+    expect(result).not.toHaveProperty("value.subtitleLabel");
   });
 
   test("a temporal column with two timepoints is enough to compare along", () => {

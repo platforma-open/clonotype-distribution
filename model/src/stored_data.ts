@@ -1,5 +1,5 @@
 import type { PlRef } from "@platforma-sdk/model";
-import type { LegacyUiState } from "./types";
+import type { BlockData, LegacyUiState } from "./types";
 
 /**
  * Args as stored at `v1` and before it: the abundance column as a ref to an upstream output,
@@ -27,3 +27,9 @@ export type BlockArgsV1 = {
  * upstream output, and the four view states.
  */
 export type BlockDataV1 = BlockArgsV1 & LegacyUiState & { filterRef?: PlRef };
+
+/**
+ * Data as stored at `v2`: the block label the UI derived from the chosen columns' result-pool
+ * labels and the settings, in place of the subtitle text.
+ */
+export type BlockDataV2 = Omit<BlockData, "subtitleLabel"> & { defaultBlockLabel: string };

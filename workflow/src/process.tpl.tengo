@@ -10,6 +10,7 @@ pframes := import("@platforma-sdk/workflow-tengo:pframes")
 pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
 slices := import("@platforma-sdk/workflow-tengo:slices")
 json := import("json")
+text := import("text")
 
 analysisSw := assets.importSoftware("@platforma-open/milaboratories.spatiotemporal-analysis.software:compartment-analysis")
 
@@ -181,17 +182,35 @@ self.body(func(inputs) {
 
 	elementAxisSpec := abundanceSpec.axesSpec[1]
 
-	// Per-instance label, resolved in main.tpl.tengo as
-	// customBlockLabel || defaultBlockLabel || "Clonotype Distribution". Stamping it
-	// into every output column gives each instance a distinct trace entry, so
-	// downstream label derivation can add a suffix instead of two identical options.
-	// Mode/normalization are deliberately not appended here: mode already rides in via
-	// the UI-derived defaultBlockLabel, a custom label must stay verbatim, and any
-	// distinguishing setting belongs in that UI label, not the trace stamp (§5).
+	// Per-instance label. Stamping it into every output column gives each instance a distinct
+	// trace entry, so downstream label derivation can add a suffix instead of two identical
+	// options. A custom label is kept verbatim; otherwise it is the block name with the native
+	// labels of the chosen grouping, temporal and subject columns, then the settings.
+	blockLabel := inputs.customBlockLabel
+	if blockLabel == undefined || blockLabel == "" {
+		labelParts := []
+		for ref in [inputs.groupingColumnRef, inputs.temporalColumnRef, inputs.subjectColumnRef] {
+			if ref == undefined {
+				continue
+			}
+			annotations := columns.getSpec(ref).annotations
+			label := is_undefined(annotations) ? undefined : annotations["pl7.app/label"]
+			if !is_undefined(label) && label != "" {
+				labelParts = append(labelParts, label)
+			}
+		}
+		if inputs.paramsLabel != "" {
+			labelParts = append(labelParts, inputs.paramsLabel)
+		}
+		blockLabel = "Clonotype Distribution"
+		if len(labelParts) > 0 {
+			blockLabel = "Clonotype Distribution (" + text.join(labelParts, ", ") + ")"
+		}
+	}
 	trace := pSpec.makeTrace(traceSpec, {
 		type: "milaboratories.spatiotemporal-analysis",
 		importance: 30,
-		label: inputs.blockLabel
+		label: blockLabel
 	})
 
 	// Wrap a splitDataAndSpec xsv.importFile result into a traced PFrame.
