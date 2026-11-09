@@ -37,7 +37,7 @@ export type BlockArgs = {
 export type BlockData = Omit<BlockArgs, "inputFilter" | "paramsLabel"> & {
   /**
    * Labels of the chosen subject, grouping and temporal columns as the result pool shows them.
-   * Written by the column pickers on a user pick; feeds the subtitle only, never the workflow.
+   * Kept in sync by the UI; feeds the subtitle only, never the workflow.
    */
   subtitleLabel?: string;
   /** Subset column picked with the abundance in PlDatasetSelector (e.g. a Repertoire Labeling label). */

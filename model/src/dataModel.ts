@@ -18,14 +18,14 @@ export const blockDataModel = new DataModelBuilder({ kind })
   // Columns become result-pool ids and the timepoints column value ids
   .migrate<BlockDataV2>("v2", toColumnIds)
   // The old label mixed the chosen columns' result-pool labels with settings; the settings part
-  // is recomputed from data, and the column part returns on the next column pick.
+  // is recomputed from data, and the column part returns once the block is opened.
   .migrate<BlockData>("v3", ({ defaultBlockLabel: _, ...rest }) => ({
     ...rest,
     subtitleLabel: "",
   }))
   .init(({ params }) => ({
     customBlockLabel: params?.customBlockLabel ?? "",
-    // The columns' result-pool labels are out of reach here; the first column pick fills them in.
+    // The columns' result-pool labels are out of reach here; the UI fills them in once it opens.
     subtitleLabel: "",
     abundanceRef: params?.abundanceRef,
     filterRef: params?.filterRef,

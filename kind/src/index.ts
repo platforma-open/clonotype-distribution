@@ -16,8 +16,8 @@ export type Normalization = "relative-frequency" | "clr";
  * chronological order of the timepoints, the normalization, the four numeric
  * thresholds, and the subtitle they type.
  *
- * `subtitleLabel` is absent: it is display text the column pickers copy from
- * the result pool on a user pick, not configuration.
+ * `subtitleLabel` is absent: it is display text the UI copies from the result
+ * pool, not configuration.
  *
  * The columns (`abundanceRef`, `filterRef` and the three metadata columns) are
  * result-pool column ids, each naming the block that produced the column. The

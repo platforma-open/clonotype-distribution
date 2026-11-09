@@ -4,7 +4,7 @@ import {
   fromAbundanceSelection,
   toAbundanceSelection,
 } from "@platforma-open/milaboratories.spatiotemporal-analysis.model";
-import type { ColumnUniversalId, DatasetSelection } from "@platforma-sdk/model";
+import type { DatasetSelection } from "@platforma-sdk/model";
 import {
   PlAccordion,
   PlAccordionSection,
@@ -58,25 +58,6 @@ const normalizationOptions = [
 const tableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.mainTable,
 });
-
-type MetadataColumnField = "subjectColumnRef" | "groupingColumnRef" | "temporalColumnRef";
-
-function setMetadataColumn(field: MetadataColumnField, ref: ColumnUniversalId | undefined) {
-  app.model.data[field] = ref;
-  refreshSubtitleLabel();
-}
-
-// The subtitle names the chosen grouping, temporal and subject columns as the result pool labels
-// them. Called only from the pickers' setters, so reopening the block never rewrites it.
-function refreshSubtitleLabel() {
-  const metadataOptions = app.model.outputs.metadataOptions ?? [];
-  const { groupingColumnRef, temporalColumnRef, subjectColumnRef } = app.model.data;
-  app.model.data.subtitleLabel = [groupingColumnRef, temporalColumnRef, subjectColumnRef]
-    .filter((ref) => ref !== undefined)
-    .map((ref) => metadataOptions.find((o) => o.value === ref)?.label)
-    .filter(Boolean)
-    .join(", ");
-}
 
 // Subject is required only in intra-subject mode
 const subjectRequired = computed(() => app.model.data.calculationMode === "intra-subject");
@@ -195,12 +176,11 @@ const isAdvancedOpen = ref(false);
     />
 
     <PlDropdown
-      :model-value="app.model.data.subjectColumnRef"
+      v-model="app.model.data.subjectColumnRef"
       :options="app.model.outputs.metadataOptions"
       label="Subject variable"
       :required="subjectRequired"
       clearable
-      @update:model-value="(ref) => setMetadataColumn('subjectColumnRef', ref)"
     >
       <template #tooltip>
         Required for Intra-Subject mode. Optional in Population-Level mode — when omitted, all
@@ -209,11 +189,10 @@ const isAdvancedOpen = ref(false);
     </PlDropdown>
 
     <PlDropdown
-      :model-value="app.model.data.groupingColumnRef"
+      v-model="app.model.data.groupingColumnRef"
       :options="app.model.outputs.metadataOptions"
       label="Grouping variable"
       clearable
-      @update:model-value="(ref) => setMetadataColumn('groupingColumnRef', ref)"
     >
       <template #tooltip>
         Categorical metadata column (e.g. tissue, organ) used to compute distribution metrics:
@@ -222,11 +201,10 @@ const isAdvancedOpen = ref(false);
     </PlDropdown>
 
     <PlDropdown
-      :model-value="app.model.data.temporalColumnRef"
+      v-model="app.model.data.temporalColumnRef"
       :options="app.model.outputs.metadataOptions"
       label="Temporal variable"
       clearable
-      @update:model-value="(ref) => setMetadataColumn('temporalColumnRef', ref)"
     >
       <template #tooltip>
         Ordered metadata column (e.g. timepoint, day) used to compute temporal expansion metrics:

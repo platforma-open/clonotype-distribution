@@ -75,8 +75,8 @@ export const platforma = BlockModelV3.create({ dataModel: blockDataModel, kind }
   })
 
   // Inverse of the kind's init-params contract: every field a user sets by
-  // hand. `subtitleLabel` is display text copied from the result pool on a
-  // column pick, so it is never templated.
+  // hand. `subtitleLabel` is display text the UI copies from the result pool,
+  // so it is never templated.
   .templateParams((data) => ({
     abundanceRef: data.abundanceRef,
     filterRef: data.filterRef,
