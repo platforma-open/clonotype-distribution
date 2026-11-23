@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.spatiotemporal-analysis.ui
 
+## 1.0.2
+
+### Patch Changes
+
+- @platforma-open/milaboratories.spatiotemporal-analysis.model@1.0.2
+
 ## 1.0.1
 
 ### Patch Changes
